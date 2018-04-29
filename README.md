@@ -40,6 +40,8 @@ OCI Libraries   : /usr/lib/oracle/12.1/client64/lib/
 INSTANT_CLIENT_LIB_PATH     = path to oci libraries
 INSTANT_CLIENT_INCLUDE_PATH = path to oci headers
 ERL_INTERFACE_DIR           = path to erl_interface or erlang installation
+LIBEVENT_LIB_PATH           = path to libevent libraries (optional, s.a. `pkg-config libevent --libs`)
+LIBEVENT_INCLUDE_PATH       = path to libevent headers (optional, s.a. `pkg-config libevent --cflags`)
 ```
 
 For example:

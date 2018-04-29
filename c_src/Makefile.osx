@@ -23,8 +23,19 @@ ERLOCI_HDRS = $(wildcard $(addprefix $(ERLOCI_PATH)/, *.h))
 ERLOCI_SRCS = $(wildcard $(addprefix $(ERLOCI_PATH)/, *.cpp))
 ERLOCI_OBJS = $(ERLOCI_SRCS:.cpp=.o)
 
-CXXFLAGS = -ggdb -Wall -I$(ERL_INTERFACE_DIR)/include  -I$(ERLOCI_PATH) -I$(ERLOCI_LIB_PATH) -I$(OCI_INCLUDE_PATH)
-LINKDIRS = -L$(ERL_INTERFACE_DIR)/lib -L$(PRIV_DIR) -L$(OCI_LIB_PATH)
+ifeq "$(LIBEVENT_INCLUDE_PATH)" ""
+	LIBEVENT_CFLAGS = 
+else
+	LIBEVENT_CFLAGS = -I$(LIBEVENT_INCLUDE_PATH)
+endif
+ifeq "$(LIBEVENT_LIB_PATH)" ""
+	LIBEVENT_LDFLAGS = 
+else
+	LIBEVENT_LDFLAGS = -L$(LIBEVENT_LIB_PATH)
+endif
+
+CXXFLAGS = -ggdb -Wall -I$(ERL_INTERFACE_DIR)/include  -I$(ERLOCI_PATH) -I$(ERLOCI_LIB_PATH) -I$(OCI_INCLUDE_PATH) $(LIBEVENT_CFLAGS)
+LINKDIRS = -L$(ERL_INTERFACE_DIR)/lib -L$(PRIV_DIR) -L$(OCI_LIB_PATH) $(LIBEVENT_LDFLAGS)
 #LINKFLAGS = -levent -lpthread -lerl_interface -lei -lerloci -locci -lons -lclntshcore -lclntsh -lnnz12 -lipc1 -lmql1
 LINKFLAGS = -levent -lpthread -lerl_interface -lei -lerloci -locci -lclntsh -lnnz12
 
