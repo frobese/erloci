@@ -25,7 +25,7 @@ bool log_flag;
 
 int main(int argc, char * argv[])
 {
-    char *nls_lang;
+    const char *nls_lang;
     nls_lang = getenv("NLS_LANG");
 #ifdef __WIN32__
     _setmode( _fileno( stdout ), _O_BINARY );

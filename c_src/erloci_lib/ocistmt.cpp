@@ -308,7 +308,7 @@ unsigned int ocistmt::execute(void * column_list, void * rowid_list, void * out_
 					}
 
 					// Get the row ID for the row that was just inserted.
-					OraText *rowID;
+					OraText *rowID = NULL;
 					ub2 size = 0;
 					OCIRowidToChar(pRowID, rowID, &size, (OCIError*)_errhp);
 					rowID = new OraText[size + 1]; // Extra char for null termination.
@@ -321,7 +321,7 @@ unsigned int ocistmt::execute(void * column_list, void * rowid_list, void * out_
 						throw r;
 					}
 					(*intf.append_string_to_list)((char*)rowID, strlen((char*)rowID), rowid_list);
-					delete rowID;
+					delete[] rowID;
 				} else {
 					(*intf.append_string_to_list)(NULL, 0, rowid_list);
 				}
@@ -957,7 +957,7 @@ intf_ret ocistmt::rows(void * row_list, unsigned int maxrowcount)
 					case SQLT_RDD: {
 						OCIRowid * pRowID = (OCIRowid*)_columns[i]->row_valp;
 						ub2 size = 0;
-						OraText *rowID;
+						OraText *rowID = NULL;
 						OCIRowidToChar(pRowID, rowID, &size, (OCIError*)_errhp);
 						rowID = new OraText[size + 1]; // Extra char for null termination.
 						memset(rowID, 0, size + 1); // Set to all nulls so that string will be null terminated.
@@ -968,7 +968,7 @@ intf_ret ocistmt::rows(void * row_list, unsigned int maxrowcount)
 						}
 						size_t str_len = strlen((char*)rowID);
 						(*intf.append_string_to_list)((char*)rowID, str_len, row);
-						delete rowID;
+						delete[] rowID;
 						break;
 					}
 					case SQLT_BIN:
@@ -1099,7 +1099,7 @@ intf_ret ocistmt::lob(void * data, void * _lob, unsigned long long offset, unsig
 
 	(*intf.binary_data)(buf, loblen, data);
 
-	delete buf;
+	delete[] buf;
 	return r;
 }
 

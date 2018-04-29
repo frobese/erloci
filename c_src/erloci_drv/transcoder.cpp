@@ -183,7 +183,7 @@ ETERM * transcoder::stl_to_erlterm(term & t)
 				++i;
 			}
 			et = erl_mk_list(et_ms, (int)t.length());
-            delete et_ms;
+            delete[] et_ms;
 					   }
 			break;
 		case term::TUPLE: {
@@ -194,7 +194,7 @@ ETERM * transcoder::stl_to_erlterm(term & t)
 				++i;
 			}
 			et = erl_mk_tuple(et_ms, (int)t.length());
-            delete et_ms;
+            delete[] et_ms;
 						}
 			break;
         default:

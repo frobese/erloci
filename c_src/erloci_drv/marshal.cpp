@@ -301,7 +301,6 @@ void map_schema_to_bind_args(term & t, vector<var> & vars)
 
     var v;
 
-	size_t len = 0;
 	for (term::iterator it = t.begin() ; it != t.end(); ++it) {
 		ASSERT((*it).is_tuple()
 			&& (*it).length() == 3
