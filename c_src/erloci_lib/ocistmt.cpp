@@ -893,6 +893,10 @@ intf_ret ocistmt::rows(void * row_list, unsigned int maxrowcount)
 					case SQLT_BFILE: {
 							OCILobLocator *_tlob;
 							oraub8 loblen = 0;
+							if(_columns[i]->indp < 0) {
+								(*intf.append_tuple_to_list)(0, 0, row);
+								break;
+							}
 							checkerr(&r, OCILobGetLength2((OCISvcCtx*)_svchp, (OCIError*)_errhp, (OCILobLocator*)(_columns[i]->row_valp), &loblen));
 							if(r.fn_ret != SUCCESS) {
 								REMOTE_LOG(ERR, "failed OCILobGetLength for %p row %d column %d reason %s (%s)\n", _stmthp, num_rows, i, r.gerrbuf, _stmtstr);
@@ -925,6 +929,10 @@ intf_ret ocistmt::rows(void * row_list, unsigned int maxrowcount)
 					case SQLT_BLOB: {
 							OCILobLocator *_tlob;
 							unsigned long long loblen = 0;
+							if(_columns[i]->indp < 0) {
+								(*intf.append_tuple_to_list)(0, 0, row);
+								break;
+							}
 							checkerr(&r, OCILobGetLength2((OCISvcCtx*)_svchp, (OCIError*)_errhp, (OCILobLocator*)(_columns[i]->row_valp), (oraub8*)&loblen));
 							if(r.fn_ret != SUCCESS) {
 								REMOTE_LOG(ERR, "failed OCILobGetLength for %p row %d column %d reason %s (%s)\n", _stmthp, num_rows, i, r.gerrbuf, _stmtstr);
