@@ -35,6 +35,22 @@ OCI Headers     : /usr/include/oracle/12.1/client64/
 OCI Libraries   : /usr/lib/oracle/12.1/client64/lib/
 ```
 
+#### via Homebrew
+1. [Download](http://www.oracle.com/technetwork/topics/intel-macsoft-096467.html) latest instantclient-basic/sdk
+2. Copy both files to ~/Library/Caches/Homebrew  
+3. Install the InstantClient via HomeBrew
+```
+$ brew tap InstantClientTap/instantclient
+$ brew install instantclient-basic
+$ brew install instantclient-sqlplus
+```
+4. Export variables
+```
+export INSTANT_CLIENT_LIB_PATH=/usr/local/Cellar/instantclient-basic/12.2.0.1.0-2/lib/
+export INSTANT_CLIENT_INCLUDE_PATH=/usr/local/Cellar/instantclient-sdk/12.2.0.1.0-2/include/
+export ERL_INTERFACE_DIR=/usr/local/Cellar/erlang/20.3.6/lib/erlang/lib/erl_interface-3.10.2
+```
+
 ### Create Environment variables
 ```
 INSTANT_CLIENT_LIB_PATH     = path to oci libraries
