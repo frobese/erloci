@@ -232,16 +232,12 @@ init([Logging, ListenPort, LSock, LogFun, Options]) ->
                 false -> {stop, bad_executable};
                 Executable ->
                     Ret = start_exe(Executable, Logging, ListenPort, PortLogger, Options),
-                    %PortLogger:accept(),
-                    Module = element(1, PortLogger), % Tuple calls have been removed in OTP/21
-                    Module:accept(PortLogger),
+                    oci_logger:accept(PortLogger),
                     Ret
             end;
         Executable ->
             Ret = start_exe(Executable, Logging, ListenPort, PortLogger, Options),
-            %PortLogger:accept(),
-            Module = element(1, PortLogger), % Tuple calls have been removed in OTP/21
-            Module:accept(PortLogger),
+            oci_logger:accept(PortLogger),
             Ret
     end.
 
