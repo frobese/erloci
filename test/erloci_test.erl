@@ -90,7 +90,7 @@ db_negative_test_() ->
                 #{ociport => OciPort, conf => Conf}
         end,
         fun(#{ociport := OciPort}) ->
-                OciPort:close(),
+                oci_port:close(OciPort),
                 application:stop(erloci)
         end,
         {with, [
@@ -105,28 +105,28 @@ echo(#{ociport := OciPort}) ->
     ?ELog("|                     echo                    |"),
     ?ELog("+---------------------------------------------+"),
     ?ELog("echo back erlang terms", []),
-    ?assertEqual(1, OciPort:echo(1)),
-    ?assertEqual(1.2, OciPort:echo(1.2)),
-    ?assertEqual(atom, OciPort:echo(atom)),
-    ?assertEqual(self(), OciPort:echo(self())),
-    ?assertEqual(node(), OciPort:echo(node())),
+    ?assertEqual(1, oci_port:echo(1, OciPort)),
+    ?assertEqual(1.2, oci_port:echo(1.2, OciPort)),
+    ?assertEqual(atom, oci_port:echo(atom, OciPort)),
+    ?assertEqual(self(), oci_port:echo(self(), OciPort)),
+    ?assertEqual(node(), oci_port:echo(node(), OciPort)),
     Ref = make_ref(),
-    ?assertEqual(Ref, OciPort:echo(Ref)),
+    ?assertEqual(Ref, oci_port:echo(Ref, OciPort)),
     % Load the ref cache to generate long ref
     Refs = [make_ref() || _I <- lists:seq(1,1000000)],
     ?debugFmt("~p refs created to load ref cache", [length(Refs)]),
     Ref1 = make_ref(),
-    ?assertEqual(Ref1, OciPort:echo(Ref1)),
+    ?assertEqual(Ref1, oci_port:echo(Ref1, OciPort)),
     %Fun = fun() -> ok end, % Not Supported
-    %?assertEqual(Fun, OciPort:echo(Fun)),
-    ?assertEqual("", OciPort:echo("")),
-    ?assertEqual(<<>>, OciPort:echo(<<>>)),
-    ?assertEqual([], OciPort:echo([])),
-    ?assertEqual({}, OciPort:echo({})),
-    ?assertEqual("string", OciPort:echo("string")),
-    ?assertEqual(<<"binary">>, OciPort:echo(<<"binary">>)),
-    ?assertEqual({1,'Atom',1.2,"string"}, OciPort:echo({1,'Atom',1.2,"string"})),
-    ?assertEqual([1, atom, 1.2,"string"], OciPort:echo([1,atom,1.2,"string"])).
+    %?assertEqual(Fun, oci_port:echo(Fun, OciPort)),
+    ?assertEqual("", oci_port:echo("", OciPort)),
+    ?assertEqual(<<>>, oci_port:echo(<<>>, OciPort)),
+    ?assertEqual([], oci_port:echo([], OciPort)),
+    ?assertEqual({}, oci_port:echo({}, OciPort)),
+    ?assertEqual("string", oci_port:echo("string", OciPort)),
+    ?assertEqual(<<"binary">>, oci_port:echo(<<"binary">>, OciPort)),
+    ?assertEqual({1,'Atom',1.2,"string"}, oci_port:echo({1,'Atom',1.2,"string"}, OciPort)),
+    ?assertEqual([1, atom, 1.2,"string"], oci_port:echo([1,atom,1.2,"string"], OciPort)).
 
 bad_password(#{ociport := OciPort, conf := #{tns := Tns, user := User, password := Pswd}}) ->
     ?ELog("+---------------------------------------------+"),
@@ -135,21 +135,21 @@ bad_password(#{ociport := OciPort, conf := #{tns := Tns, user := User, password 
     ?ELog("get_session with wrong password", []),
     ?assertMatch(
        {error, {1017,_}},
-       OciPort:get_session(Tns, User, list_to_binary([Pswd,"_bad"]))).
+       oci_port:get_session(Tns, User, list_to_binary([Pswd,"_bad"]), OciPort)).
 
 session_ping(#{ociport := OciPort, conf := #{tns := Tns, user := User, password := Pswd}}) ->
     ?ELog("+---------------------------------------------+"),
     ?ELog("|                 session_ping                |"),
     ?ELog("+---------------------------------------------+"),
     ?ELog("ping oci session", []),
-    OciSession = OciPort:get_session(Tns, User, Pswd),
-    ?assertEqual(pong, OciSession:ping()),
-    SelStmt = OciSession:prep_sql("select * from dual"),
-    ?assertEqual(pong, OciSession:ping()),
-    ?assertMatch({cols,[{<<"DUMMY">>,'SQLT_CHR',_,0,0}]}, SelStmt:exec_stmt()),
-    ?assertEqual(pong, OciSession:ping()),
-    ?assertEqual({{rows,[[<<"X">>]]},true}, SelStmt:fetch_rows(100)),
-    ?assertEqual(pong, OciSession:ping()).
+    OciSession = oci_port:get_session(Tns, User, Pswd, OciPort),
+    ?assertEqual(pong, oci_port:ping(OciSession)),
+    SelStmt = oci_port:prep_sql("select * from dual", OciSession),
+    ?assertEqual(pong, oci_port:ping(OciSession)),
+    ?assertMatch({cols,[{<<"DUMMY">>,'SQLT_CHR',_,0,0}]}, oci_port:exec_stmt(SelStmt)),
+    ?assertEqual(pong, oci_port:ping(OciSession)),
+    ?assertEqual({{rows,[[<<"X">>]]},true}, oci_port:fetch_rows(100, SelStmt)),
+    ?assertEqual(pong, oci_port:ping(OciSession)).
 
 %%------------------------------------------------------------------------------
 %% db_test_
@@ -163,15 +163,15 @@ db_test_() ->
                #{tns := Tns, user := User, password := Pswd,
                  logging := Logging, lang := Lang} = Conf,
                OciPort = erloci:new([{logging, Logging}, {env, [{"NLS_LANG", Lang}]}]),
-               OciSession = OciPort:get_session(Tns, User, Pswd),
+               OciSession = oci_port:get_session(Tns, User, Pswd, OciPort),
                ssh(#{ociport => OciPort, ocisession => OciSession, conf => Conf})
        end,
        fun(#{ociport := OciPort, ocisession := OciSession} = State) ->
-               DropStmt = OciSession:prep_sql(?DROP),
-               DropStmt:exec_stmt(),
-               DropStmt:close(),
-               OciSession:close(),
-               OciPort:close(),
+               DropStmt = oci_port:prep_sql(?DROP, OciSession),
+               oci_port:exec_stmt(DropStmt),
+               oci_port:close(DropStmt),
+               oci_port:close(OciSession),
+               oci_port:close(OciPort),
                application:stop(erloci),
                case State of
                    #{ssh_conn_ref := ConRef} ->
@@ -219,19 +219,19 @@ ssh(State) ->
 
 flush_table(OciSession) ->
     ?ELog("creating (drop if exists) table ~s", [?TESTTABLE]),
-    DropStmt = OciSession:prep_sql(?DROP),
+    DropStmt = oci_port:prep_sql(?DROP, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, DropStmt),
     % If table doesn't exists the handle isn't valid
     % Any error is ignored anyway
-    case DropStmt:exec_stmt() of
+    case oci_port:exec_stmt(DropStmt) of
         {error, _} -> ok;
-        _ -> ?assertEqual(ok, DropStmt:close())
+        _ -> ?assertEqual(ok, oci_port:close(DropStmt))
     end,
     ?ELog("creating table ~s", [?TESTTABLE]),
-    StmtCreate = OciSession:prep_sql(?CREATE),
+    StmtCreate = oci_port:prep_sql(?CREATE, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtCreate),
-    ?assertEqual({executed, 0}, StmtCreate:exec_stmt()),
-    ?assertEqual(ok, StmtCreate:close()).
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(StmtCreate)),
+    ?assertEqual(ok, oci_port:close(StmtCreate)).
 
 ssh_cmd(ConRef, Cmd) ->
     {ok, Chn} = ssh_connection:session_channel(ConRef, infinity),
@@ -264,15 +264,15 @@ named_session(#{ociport := OciPort,
     ?ELog("+---------------------------------------------+"),
     ?ELog("|                named_session                |"),
     ?ELog("+---------------------------------------------+"),
-    OciSession = OciPort:get_session(Tns, User, Pswd, "eunit_test_tagged"),
-    StmtSelect = OciSession:prep_sql(
+    OciSession = oci_port:get_session(Tns, User, Pswd, "eunit_test_tagged", OciPort),
+    StmtSelect = oci_port:prep_sql(
                    <<"select * from V$SESSION"
-                     " where CLIENT_IDENTIFIER = 'eunit_test_tagged'">>),
+                     " where CLIENT_IDENTIFIER = 'eunit_test_tagged'">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtSelect),
-    ?assertMatch({cols, _}, StmtSelect:exec_stmt()),
-    ?assertMatch({{rows, _}, true}, StmtSelect:fetch_rows(1)),
-    ?assertEqual(ok, StmtSelect:close()),
-    OciSession:close().
+    ?assertMatch({cols, _}, oci_port:exec_stmt(StmtSelect)),
+    ?assertMatch({{rows, _}, true}, oci_port:fetch_rows(1, StmtSelect)),
+    ?assertEqual(ok, oci_port:close(StmtSelect)),
+    oci_port:close(OciSession).
 
 lob(#{ocisession := OciSession, ssh_conn_ref := ConRef}) ->
     ?ELog("+---------------------------------------------+"),
@@ -294,12 +294,12 @@ lob(#{ocisession := OciSession, ssh_conn_ref := ConRef}) ->
      end || I <- lists:seq(1,RowCount)],
 
     CreateDirSql = <<"create or replace directory \"TestDir\" as '/tmp'">>,
-    StmtDirCreate = OciSession:prep_sql(CreateDirSql),
+    StmtDirCreate = oci_port:prep_sql(CreateDirSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtDirCreate),
-    case StmtDirCreate:exec_stmt() of
+    case oci_port:exec_stmt(StmtDirCreate) of
         {executed, 0} ->
             ?ELog("created Directory alias for /tmp"),
-            ?assertEqual(ok, StmtDirCreate:close());
+            ?assertEqual(ok, oci_port:close(StmtDirCreate));
         {error, {955, _}} ->
             ?ELog("Dir alias for /tmp exists");
         {error, {N,Error}} ->
@@ -307,39 +307,39 @@ lob(#{ocisession := OciSession, ssh_conn_ref := ConRef}) ->
             ?ELog("SQL ~s", [CreateDirSql]),
             ?assertEqual("Directory Created", "Directory creation failed")
     end,
-    StmtCreate = OciSession:prep_sql(
-                   <<"create table lobs(clobd clob, blobd blob, nclobd nclob, bfiled bfile)">>),
+    StmtCreate = oci_port:prep_sql(
+                   <<"create table lobs(clobd clob, blobd blob, nclobd nclob, bfiled bfile)">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtCreate),
-    case StmtCreate:exec_stmt() of
+    case oci_port:exec_stmt(StmtCreate) of
         {executed, 0} ->
             ?ELog("creating table lobs", []),
-            ?assertEqual(ok, StmtCreate:close());
+            ?assertEqual(ok, oci_port:close(StmtCreate));
         _ ->
-            StmtTruncate = OciSession:prep_sql(<<"truncate table lobs">>),
+            StmtTruncate = oci_port:prep_sql(<<"truncate table lobs">>, OciSession),
             ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtTruncate),
-            ?assertEqual({executed, 0}, StmtTruncate:exec_stmt()),
+            ?assertEqual({executed, 0}, oci_port:exec_stmt(StmtTruncate)),
             ?ELog("truncated table lobs", []),
-            ?assertEqual(ok, StmtTruncate:close())
+            ?assertEqual(ok, oci_port:close(StmtTruncate))
     end,
 
     [begin
-        StmtInsert = OciSession:prep_sql(list_to_binary(["insert into lobs values("
+        StmtInsert = oci_port:prep_sql(list_to_binary(["insert into lobs values, OciSession("
             "to_clob('clobd0'),"
             "hextoraw('453d7a30'),"
             "to_nclob('nclobd0'),"
             "bfilename('TestDir', 'test",integer_to_list(I),".bin')"
             ")"])),
         ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtInsert),
-        ?assertMatch({rowids, [_]}, StmtInsert:exec_stmt()),
-        ?assertEqual(ok, StmtInsert:close())
+        ?assertMatch({rowids, [_]}, oci_port:exec_stmt(StmtInsert)),
+        ?assertEqual(ok, oci_port:close(StmtInsert))
      end
      || I <- lists:seq(1,RowCount)],
     ?ELog("inserted ~p rows into lobs", [RowCount]),
 
-    StmtSelect = OciSession:prep_sql(<<"select * from lobs">>),
+    StmtSelect = oci_port:prep_sql(<<"select * from lobs">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtSelect),
-    ?assertMatch({cols, _}, StmtSelect:exec_stmt()),
-    {{rows, Rows}, true} = StmtSelect:fetch_rows(RowCount+1),
+    ?assertMatch({cols, _}, oci_port:exec_stmt(StmtSelect)),
+    {{rows, Rows}, true} = oci_port:fetch_rows(RowCount+1, StmtSelect),
     ?assertEqual(RowCount, length(Rows)),
 
     lists:foreach(
@@ -348,29 +348,29 @@ lob(#{ocisession := OciSession, ssh_conn_ref := ConRef}) ->
                {LidBfiled, BfiledLen, DirBin, File} | _] = Row,
               ?assertEqual(DirBin, <<"TestDir">>),
               ?ELog("processing... : ~s", [File]),
-              {lob, ClobDVal} = StmtSelect:lob(LidClobd, 1, ClobdLen),
+              {lob, ClobDVal} = oci_port:lob(LidClobd, 1, ClobdLen, StmtSelect),
               ?assertEqual(<<"clobd0">>, ClobDVal),
-              {lob, BlobDVal} = StmtSelect:lob(LidBlobd, 1, BlobdLen),
+              {lob, BlobDVal} = oci_port:lob(LidBlobd, 1, BlobdLen, StmtSelect),
               ?assertEqual(<<16#45, 16#3d, 16#7a, 16#30>>, BlobDVal),
-              {lob, NClobDVal} = StmtSelect:lob(LidNclobd, 1, NclobdLen),
+              {lob, NClobDVal} = oci_port:lob(LidNclobd, 1, NclobdLen, StmtSelect),
               ?assertEqual(<<"nclobd0">>, NClobDVal),
               [FileContent] = ssh_cmd(ConRef,"cat "++File),
-              {lob, FileContentDB} = StmtSelect:lob(LidBfiled, 1, BfiledLen),
+              {lob, FileContentDB} = oci_port:lob(LidBfiled, 1, BfiledLen, StmtSelect),
               ?assertEqual(FileContent, FileContentDB),
               ?ELog("processed : ~s", [File])
       end, Rows),
 
-    ?assertEqual(ok, StmtSelect:close()),
+    ?assertEqual(ok, oci_port:close(StmtSelect)),
 
     ?ELog("RM ~p", [[ssh_cmd(ConRef, "rm -f "++File) || File <- Files]]),
-    StmtDrop = OciSession:prep_sql(<<"drop table lobs">>),
+    StmtDrop = oci_port:prep_sql(<<"drop table lobs">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtDrop),
-    ?assertEqual({executed, 0}, StmtDrop:exec_stmt()),
-    ?assertEqual(ok, StmtDrop:close()),
-    StmtDirDrop = OciSession:prep_sql(list_to_binary(["drop directory \"TestDir\""])),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(StmtDrop)),
+    ?assertEqual(ok, oci_port:close(StmtDrop)),
+    StmtDirDrop = oci_port:prep_sql(list_to_binary(["drop directory \"TestDir\""]), OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtDirDrop),
-    ?assertEqual({executed, 0}, StmtDirDrop:exec_stmt()),
-    ?assertEqual(ok, StmtDirDrop:close());
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(StmtDirDrop)),
+    ?assertEqual(ok, oci_port:close(StmtDirDrop));
 lob(_) ->
     ?ELog("+---------------------------------------------+"),
     ?ELog("|            lob (SKIPPED)                    |"),
@@ -382,35 +382,35 @@ drop_create(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
 
     ?ELog("creating (drop if exists) table ~s", [?TESTTABLE]),
-    TmpDropStmt = OciSession:prep_sql(?DROP),
+    TmpDropStmt = oci_port:prep_sql(?DROP, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, TmpDropStmt),
-    case TmpDropStmt:exec_stmt() of
+    case oci_port:exec_stmt(TmpDropStmt) of
         {error, _} -> ok; % If table doesn't exists the handle isn't valid
-        _ -> ?assertEqual(ok, TmpDropStmt:close())
+        _ -> ?assertEqual(ok, oci_port:close(TmpDropStmt))
     end,
-    StmtCreate = OciSession:prep_sql(?CREATE),
+    StmtCreate = oci_port:prep_sql(?CREATE, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtCreate),
-    ?assertEqual({executed, 0}, StmtCreate:exec_stmt()),
-    ?assertEqual(ok, StmtCreate:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(StmtCreate)),
+    ?assertEqual(ok, oci_port:close(StmtCreate)),
 
     ?ELog("dropping table ~s", [?TESTTABLE]),
-    DropStmt = OciSession:prep_sql(?DROP),
+    DropStmt = oci_port:prep_sql(?DROP, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, DropStmt),
-    ?assertEqual({executed,0}, DropStmt:exec_stmt()),
-    ?assertEqual(ok, DropStmt:close()).
+    ?assertEqual({executed,0}, oci_port:exec_stmt(DropStmt)),
+    ?assertEqual(ok, oci_port:close(DropStmt)).
 
 bad_sql_connection_reuse(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
     ?ELog("|           bad_sql_connection_reuse          |"),
     ?ELog("+---------------------------------------------+"),
     BadSelect = <<"select 'abc from dual">>,
-    ?assertMatch({error, {1756, _}}, OciSession:prep_sql(BadSelect)),
+    ?assertMatch({error, {1756, _}}, oci_port:prep_sql(BadSelect, OciSession)),
     GoodSelect = <<"select 'abc' from dual">>,
-    SelStmt = OciSession:prep_sql(GoodSelect),
+    SelStmt = oci_port:prep_sql(GoodSelect, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelStmt),
-    ?assertMatch({cols, [{<<"'ABC'">>,'SQLT_AFC',_,0,0}]}, SelStmt:exec_stmt()),
-    ?assertEqual({{rows, [[<<"abc">>]]}, true}, SelStmt:fetch_rows(2)),
-    ?assertEqual(ok, SelStmt:close()).
+    ?assertMatch({cols, [{<<"'ABC'">>,'SQLT_AFC',_,0,0}]}, oci_port:exec_stmt(SelStmt)),
+    ?assertEqual({{rows, [[<<"abc">>]]}, true}, oci_port:fetch_rows(2, SelStmt)),
+    ?assertEqual(ok, oci_port:close(SelStmt)).
 
 
 insert_select_update(#{ocisession := OciSession}) ->
@@ -422,12 +422,12 @@ insert_select_update(#{ocisession := OciSession}) ->
     flush_table(OciSession),
 
     ?ELog("~s", [binary_to_list(?INSERT)]),
-    BoundInsStmt = OciSession:prep_sql(?INSERT),
+    BoundInsStmt = oci_port:prep_sql(?INSERT, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    BoundInsStmtRes = BoundInsStmt:bind_vars(?BIND_LIST),
+    BoundInsStmtRes = oci_port:bind_vars(?BIND_LIST, BoundInsStmt),
     ?assertMatch(ok, BoundInsStmtRes),
     %pkey,publisher,rank,hero,reality,votes,createdate,chapters,votes_first_rank
-    {rowids, RowIds1} = BoundInsStmt:exec_stmt(
+    {rowids, RowIds1} = oci_port:exec_stmt(
         [{ I                                                                                % pkey
          , unicode:characters_to_binary(["_püèr_",integer_to_list(I),"_"])                % publisher
          , I+I/2                                                                            % rank
@@ -437,10 +437,11 @@ insert_select_update(#{ocisession := OciSession}) ->
          , oci_util:edatetime_to_ora(os:timestamp())                                        % createdate
          , 9.999999350456404e-39                                                            % chapters
          , I                                                                                % votes_first_rank
-         } || I <- lists:seq(1, RowCount div 2)]
+         } || I <- lists:seq(1, RowCount div 2)],
+         BoundInsStmt
     ),
     ?ELog("Bound insert statement reuse"),
-    {rowids, RowIds2} = BoundInsStmt:exec_stmt(
+    {rowids, RowIds2} = oci_port:exec_stmt(
         [{ I                                                                                % pkey
          , unicode:characters_to_binary(["_püèr_",integer_to_list(I),"_"])                % publisher
          , I+I/2                                                                            % rank
@@ -450,22 +451,23 @@ insert_select_update(#{ocisession := OciSession}) ->
          , oci_util:edatetime_to_ora(os:timestamp())                                        % createdate
          , 9.999999350456404e-39                                                            % chapters
          , I                                                                                % votes_first_rank
-         } || I <- lists:seq((RowCount div 2) + 1, RowCount)]
+         } || I <- lists:seq((RowCount div 2) + 1, RowCount)],
+         BoundInsStmt
     ),
     RowIds = RowIds1 ++ RowIds2,
     ?assertMatch(RowCount, length(RowIds)),
-    ?assertEqual(ok, BoundInsStmt:close()),
+    ?assertEqual(ok, oci_port:close(BoundInsStmt)),
 
     ?ELog("~s", [binary_to_list(?SELECT_WITH_ROWID)]),
-    SelStmt = OciSession:prep_sql(?SELECT_WITH_ROWID),
+    SelStmt = oci_port:prep_sql(?SELECT_WITH_ROWID, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelStmt),
-    {cols, Cols} = SelStmt:exec_stmt(),
+    {cols, Cols} = oci_port:exec_stmt(SelStmt),
     ?ELog("selected columns ~p from table ~s", [Cols, ?TESTTABLE]),
     ?assertEqual(10, length(Cols)),
-    {{rows, Rows0}, false} = SelStmt:fetch_rows(2),
-    {{rows, Rows1}, false} = SelStmt:fetch_rows(2),
-    {{rows, Rows2}, true} = SelStmt:fetch_rows(3),
-    ?assertEqual(ok, SelStmt:close()),
+    {{rows, Rows0}, false} = oci_port:fetch_rows(2, SelStmt),
+    {{rows, Rows1}, false} = oci_port:fetch_rows(2, SelStmt),
+    {{rows, Rows2}, true} = oci_port:fetch_rows(3, SelStmt),
+    ?assertEqual(ok, oci_port:close(SelStmt)),
 
     Rows = lists:merge([Rows0, Rows1, Rows2]),
     %?ELog("Got rows~n~p", [
@@ -505,12 +507,12 @@ insert_select_update(#{ocisession := OciSession}) ->
 
     ?ELog("RowIds ~p", [RowIDs]),
     ?ELog("~s", [binary_to_list(?UPDATE)]),
-    BoundUpdStmt = OciSession:prep_sql(?UPDATE),
+    BoundUpdStmt = oci_port:prep_sql(?UPDATE, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundUpdStmt),
-    BoundUpdStmtRes = BoundUpdStmt:bind_vars(
-                        lists:keyreplace(<<":votes">>, 1, ?UPDATE_BIND_LIST, {<<":votes">>, 'SQLT_INT'})),
+    BoundUpdStmtRes = oci_port:bind_vars(
+                        lists:keyreplace(<<":votes">>, 1, ?UPDATE_BIND_LIST, {<<":votes">>, 'SQLT_INT'}), BoundUpdStmt),
     ?assertMatch(ok, BoundUpdStmtRes),
-    ?assertMatch({rowids, _}, BoundUpdStmt:exec_stmt(
+    ?assertMatch({rowids, _}, oci_port:exec_stmt(
         [{ I                                                                 % pkey
          , unicode:characters_to_binary(["_Püèr_",integer_to_list(I),"_"]) % publisher
          , I+I/3                                                             % rank
@@ -521,10 +523,11 @@ insert_select_update(#{ocisession := OciSession}) ->
          , I*2+I/1000                                                        % chapters
          , I+1                                                               % votes_first_rank
          , Key
-         } || {Key, I} <- lists:zip(RowIds1, lists:seq(1, RowCount div 2))]
+         } || {Key, I} <- lists:zip(RowIds1, lists:seq(1, RowCount div 2))],
+         BoundUpdStmt
     )),
     ?ELog("Bound update statement reuse"),
-    ?assertMatch({rowids, _}, BoundUpdStmt:exec_stmt(
+    ?assertMatch({rowids, _}, oci_port:exec_stmt(
         [{ I                                                                 % pkey
          , unicode:characters_to_binary(["_Püèr_",integer_to_list(I),"_"]) % publisher
          , I+I/3                                                             % rank
@@ -535,9 +538,10 @@ insert_select_update(#{ocisession := OciSession}) ->
          , I*2+I/1000                                                        % chapters
          , I+1                                                               % votes_first_rank
          , Key
-         } || {Key, I} <- lists:zip(RowIds2, lists:seq((RowCount div 2) + 1, RowCount))]
+         } || {Key, I} <- lists:zip(RowIds2, lists:seq((RowCount div 2) + 1, RowCount))],
+         BoundUpdStmt
     )),
-    ?assertEqual(ok, BoundUpdStmt:close()).
+    ?assertEqual(ok, oci_port:close(BoundUpdStmt)).
 
 auto_rollback(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
@@ -548,12 +552,12 @@ auto_rollback(#{ocisession := OciSession}) ->
     flush_table(OciSession),
 
     ?ELog("inserting into table ~s", [?TESTTABLE]),
-    BoundInsStmt = OciSession:prep_sql(?INSERT),
+    BoundInsStmt = oci_port:prep_sql(?INSERT, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    BoundInsStmtRes = BoundInsStmt:bind_vars(?BIND_LIST),
+    BoundInsStmtRes = oci_port:bind_vars(?BIND_LIST, BoundInsStmt),
     ?assertMatch(ok, BoundInsStmtRes),
     ?assertMatch({rowids, _},
-    BoundInsStmt:exec_stmt(
+    oci_port:exec_stmt(
         [{ I                                                                                % pkey
          , list_to_binary(["_publisher_",integer_to_list(I),"_"])                           % publisher
          , I+I/2                                                                            % rank
@@ -564,26 +568,26 @@ auto_rollback(#{ocisession := OciSession}) ->
          , I                                                                                % chapters
          , I                                                                                % votes_first_rank
          } || I <- lists:seq(1, RowCount)]
-        , 1
+        , 1, BoundInsStmt
     )),
-    ?assertEqual(ok, BoundInsStmt:close()),
+    ?assertEqual(ok, oci_port:close(BoundInsStmt)),
 
     ?ELog("selecting from table ~s", [?TESTTABLE]),
-    SelStmt = OciSession:prep_sql(?SELECT_WITH_ROWID),
+    SelStmt = oci_port:prep_sql(?SELECT_WITH_ROWID, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelStmt),
-    {cols, Cols} = SelStmt:exec_stmt(),
+    {cols, Cols} = oci_port:exec_stmt(SelStmt),
     ?assertEqual(10, length(Cols)),
-    {{rows, Rows}, false} = SelStmt:fetch_rows(RowCount),
+    {{rows, Rows}, false} = oci_port:fetch_rows(RowCount, SelStmt),
 
     ?ELog("update in table ~s", [?TESTTABLE]),
     RowIDs = [R || [R|_] <- Rows],
-    BoundUpdStmt = OciSession:prep_sql(?UPDATE),
+    BoundUpdStmt = oci_port:prep_sql(?UPDATE, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundUpdStmt),
-    BoundUpdStmtRes = BoundUpdStmt:bind_vars(?UPDATE_BIND_LIST),
+    BoundUpdStmtRes = oci_port:bind_vars(?UPDATE_BIND_LIST, BoundUpdStmt),
     ?assertMatch(ok, BoundUpdStmtRes),
 
     % Expected Invalid number Error (1722)
-    ?assertMatch({error,{1722,_}}, BoundUpdStmt:exec_stmt(
+    ?assertMatch({error,{1722,_}}, oci_port:exec_stmt(
         [{ I                                                                                % pkey
          , list_to_binary(["_Publisher_",integer_to_list(I),"_"])                           % publisher
          , I+I/3                                                                            % rank
@@ -595,13 +599,13 @@ auto_rollback(#{ocisession := OciSession}) ->
          , I+1                                                                              % votes_first_rank
          , Key
          } || {Key, I} <- lists:zip(RowIDs, lists:seq(1, length(RowIDs)))]
-        , 1
+        , 1, BoundUpdStmt
     )),
 
     ?ELog("testing rollback table ~s", [?TESTTABLE]),
-    ?assertEqual({cols, Cols}, SelStmt:exec_stmt()),
-    ?assertEqual({{rows, Rows}, false}, SelStmt:fetch_rows(RowCount)),
-    ?assertEqual(ok, SelStmt:close()).
+    ?assertEqual({cols, Cols}, oci_port:exec_stmt(SelStmt)),
+    ?assertEqual({{rows, Rows}, false}, oci_port:fetch_rows(RowCount, SelStmt)),
+    ?assertEqual(ok, oci_port:close(SelStmt)).
 
 commit_rollback(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
@@ -612,12 +616,12 @@ commit_rollback(#{ocisession := OciSession}) ->
     flush_table(OciSession),
 
     ?ELog("inserting into table ~s", [?TESTTABLE]),
-    BoundInsStmt = OciSession:prep_sql(?INSERT),
+    BoundInsStmt = oci_port:prep_sql(?INSERT, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    BoundInsStmtRes = BoundInsStmt:bind_vars(?BIND_LIST),
+    BoundInsStmtRes = oci_port:bind_vars(?BIND_LIST, BoundInsStmt),
     ?assertMatch(ok, BoundInsStmtRes),
     ?assertMatch({rowids, _},
-        BoundInsStmt:exec_stmt(
+        oci_port:exec_stmt(
           [{ I                                                              % pkey
            , list_to_binary(["_publisher_",integer_to_list(I),"_"])         % publisher
            , I+I/2                                                          % rank
@@ -629,27 +633,27 @@ commit_rollback(#{ocisession := OciSession}) ->
            , I*2+I/1000                                                     % chapters
            , I                                                              % votes_first_rank
            } || I <- lists:seq(1, RowCount)]
-          , 1
+          , 1, BoundInsStmt
     )),
-    ?assertEqual(ok, BoundInsStmt:close()),
+    ?assertEqual(ok, oci_port:close(BoundInsStmt)),
 
     ?ELog("selecting from table ~s", [?TESTTABLE]),
-    SelStmt = OciSession:prep_sql(?SELECT_WITH_ROWID),
+    SelStmt = oci_port:prep_sql(?SELECT_WITH_ROWID, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelStmt),
-    {cols, Cols} = SelStmt:exec_stmt(),
+    {cols, Cols} = oci_port:exec_stmt(SelStmt),
     ?assertEqual(10, length(Cols)),
-    {{rows, Rows}, false} = SelStmt:fetch_rows(RowCount),
+    {{rows, Rows}, false} = oci_port:fetch_rows(RowCount, SelStmt),
     ?assertEqual(RowCount, length(Rows)),
 
     ?ELog("update in table ~s", [?TESTTABLE]),
     RowIDs = [R || [R|_] <- Rows],
     ?ELog("rowids ~p", [RowIDs]),
-    BoundUpdStmt = OciSession:prep_sql(?UPDATE),
+    BoundUpdStmt = oci_port:prep_sql(?UPDATE, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundUpdStmt),
-    BoundUpdStmtRes = BoundUpdStmt:bind_vars(?UPDATE_BIND_LIST),
+    BoundUpdStmtRes = oci_port:bind_vars(?UPDATE_BIND_LIST, BoundUpdStmt),
     ?assertMatch(ok, BoundUpdStmtRes),
     ?assertMatch({rowids, _},
-        BoundUpdStmt:exec_stmt(
+        oci_port:exec_stmt(
           [{ I                                                              % pkey
            , list_to_binary(["_Publisher_",integer_to_list(I),"_"])         % publisher
            , I+I/3                                                          % rank
@@ -662,17 +666,17 @@ commit_rollback(#{ocisession := OciSession}) ->
            , I+1                                                            % votes_first_rank
            , Key
            } || {Key, I} <- lists:zip(RowIDs, lists:seq(1, length(RowIDs)))]
-          , -1
+          , -1, BoundUpdStmt
     )),
 
-    ?assertMatch(ok, BoundUpdStmt:close()),
+    ?assertMatch(ok, oci_port:close(BoundUpdStmt)),
 
     ?ELog("testing rollback table ~s", [?TESTTABLE]),
-    ?assertEqual(ok, OciSession:rollback()),
-    ?assertEqual({cols, Cols}, SelStmt:exec_stmt()),
-    {{rows, NewRows}, false} = SelStmt:fetch_rows(RowCount),
+    ?assertEqual(ok, oci_port:rollback(OciSession)),
+    ?assertEqual({cols, Cols}, oci_port:exec_stmt(SelStmt)),
+    {{rows, NewRows}, false} = oci_port:fetch_rows(RowCount, SelStmt),
     ?assertEqual(lists:sort(Rows), lists:sort(NewRows)),
-    ?assertEqual(ok, SelStmt:close()).
+    ?assertEqual(ok, oci_port:close(SelStmt)).
 
 asc_desc(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
@@ -683,10 +687,10 @@ asc_desc(#{ocisession := OciSession}) ->
     flush_table(OciSession),
 
     ?ELog("inserting into table ~s", [?TESTTABLE]),
-    BoundInsStmt = OciSession:prep_sql(?INSERT),
+    BoundInsStmt = oci_port:prep_sql(?INSERT, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    ?assertMatch(ok, BoundInsStmt:bind_vars(?BIND_LIST)),
-    ?assertMatch({rowids, _}, BoundInsStmt:exec_stmt(
+    ?assertMatch(ok, oci_port:bind_vars(?BIND_LIST, BoundInsStmt)),
+    ?assertMatch({rowids, _}, oci_port:exec_stmt(
         [{ I                                                                                % pkey
          , list_to_binary(["_publisher_",integer_to_list(I),"_"])                           % publisher
          , I+I/2                                                                            % rank
@@ -697,26 +701,26 @@ asc_desc(#{ocisession := OciSession}) ->
          , I*2+I/1000                                                                       % chapters
          , I                                                                                % votes_first_rank
          } || I <- lists:seq(1, RowCount)]
-        , 1
+        , 1, BoundInsStmt
     )),
-    ?assertEqual(ok, BoundInsStmt:close()),
+    ?assertEqual(ok, oci_port:close(BoundInsStmt)),
 
     ?ELog("selecting from table ~s", [?TESTTABLE]),
-    SelStmt1 = OciSession:prep_sql(?SELECT_ROWID_ASC),
+    SelStmt1 = oci_port:prep_sql(?SELECT_ROWID_ASC, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelStmt1),
-    SelStmt2 = OciSession:prep_sql(?SELECT_ROWID_DESC),
+    SelStmt2 = oci_port:prep_sql(?SELECT_ROWID_DESC, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelStmt2),
-    ?assertEqual(SelStmt1:exec_stmt(), SelStmt2:exec_stmt()),
+    ?assertEqual(oci_port:exec_stmt(SelStmt1), oci_port:exec_stmt(SelStmt2)),
 
-    {{rows, Rows11}, false} = SelStmt1:fetch_rows(5),
-    {{rows, Rows12}, false} = SelStmt1:fetch_rows(5),
-    {{rows, []}, true} = SelStmt1:fetch_rows(1),
+    {{rows, Rows11}, false} = oci_port:fetch_rows(5, SelStmt1),
+    {{rows, Rows12}, false} = oci_port:fetch_rows(5, SelStmt1),
+    {{rows, []}, true} = oci_port:fetch_rows(1, SelStmt1),
     Rows1 = Rows11++Rows12,
     ?assertEqual(RowCount, length(Rows1)),
 
-    {{rows, Rows21}, false} = SelStmt2:fetch_rows(5),
-    {{rows, Rows22}, false} = SelStmt2:fetch_rows(5),
-    {{rows, []}, true} = SelStmt2:fetch_rows(1),
+    {{rows, Rows21}, false} = oci_port:fetch_rows(5, SelStmt2),
+    {{rows, Rows22}, false} = oci_port:fetch_rows(5, SelStmt2),
+    {{rows, []}, true} = oci_port:fetch_rows(1, SelStmt2),
     Rows2 = Rows21++Rows22,
     ?assertEqual(RowCount, length(Rows2)),
 
@@ -724,8 +728,8 @@ asc_desc(#{ocisession := OciSession}) ->
 
     ?assertEqual(Rows1, lists:reverse(Rows2)),
 
-    ?assertEqual(ok, SelStmt1:close()),
-    ?assertEqual(ok, SelStmt2:close()).
+    ?assertEqual(ok, oci_port:close(SelStmt1)),
+    ?assertEqual(ok, oci_port:close(SelStmt2)).
 
 describe(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
@@ -735,7 +739,7 @@ describe(#{ocisession := OciSession}) ->
     flush_table(OciSession),
 
     ?ELog("describing table ~s", [?TESTTABLE]),
-    {ok, Descs} = OciSession:describe(list_to_binary(?TESTTABLE), 'OCI_PTYPE_TABLE'),
+    {ok, Descs} = oci_port:describe(list_to_binary(?TESTTABLE), 'OCI_PTYPE_TABLE', OciSession),
     ?assertEqual(9, length(Descs)),
     ?ELog("table ~s has ~p", [?TESTTABLE, Descs]).
 
@@ -744,7 +748,7 @@ function(#{ocisession := OciSession}) ->
     ?ELog("|                function                     |"),
     ?ELog("+---------------------------------------------+"),
 
-    CreateFunction = OciSession:prep_sql(<<"
+    CreateFunction = oci_port:prep_sql(<<"
         create or replace function "
         ?TESTFUNCTION
         "(sal in number, com in number)
@@ -752,39 +756,39 @@ function(#{ocisession := OciSession}) ->
         begin
             return ((sal*12)+(sal*12*nvl(com,0)));
         end;
-    ">>),
+    ">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, CreateFunction),
-    ?assertEqual({executed, 0}, CreateFunction:exec_stmt()),
-    ?assertEqual(ok, CreateFunction:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(CreateFunction)),
+    ?assertEqual(ok, oci_port:close(CreateFunction)),
 
-    SelectStmt = OciSession:prep_sql(<<"select "?TESTFUNCTION"(10,30) from dual">>),
+    SelectStmt = oci_port:prep_sql(<<"select "?TESTFUNCTION"(10,30) from dual">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelectStmt),
-    {cols, [Col|_]} = SelectStmt:exec_stmt(),
+    {cols, [Col|_]} = oci_port:exec_stmt(SelectStmt),
     ?assertEqual(<<?TESTFUNCTION"(10,30)">>, element(1, Col)),
-    {{rows, [[F|_]|_]}, true} = SelectStmt:fetch_rows(2),
+    {{rows, [[F|_]|_]}, true} = oci_port:fetch_rows(2, SelectStmt),
     ?assertEqual(<<3,194,38,21,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>, F),
-    ?assertEqual(ok, SelectStmt:close()),
+    ?assertEqual(ok, oci_port:close(SelectStmt)),
 
-    SelectBoundStmt = OciSession:prep_sql(<<"select "?TESTFUNCTION"(:SAL,:COM) from dual">>),
+    SelectBoundStmt = oci_port:prep_sql(<<"select "?TESTFUNCTION"(:SAL,:COM) from dual">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelectBoundStmt),
-    ?assertMatch(ok, SelectBoundStmt:bind_vars([{<<":SAL">>, 'SQLT_INT'}, {<<":COM">>, 'SQLT_INT'}])),
-    {cols, [Col2|_]} = SelectBoundStmt:exec_stmt([{10, 30}], 1),
+    ?assertMatch(ok, oci_port:bind_vars([{<<":SAL">>, 'SQLT_INT'}, {<<":COM">>, 'SQLT_INT'}], SelectBoundStmt)),
+    {cols, [Col2|_]} = oci_port:exec_stmt([{10, 30}], 1, SelectBoundStmt),
     ?assertEqual(<<?TESTFUNCTION"(:SAL,:COM)">>, element(1, Col2)),
-    ?assertMatch({{rows, [[F|_]|_]}, true}, SelectBoundStmt:fetch_rows(2)),
+    ?assertMatch({{rows, [[F|_]|_]}, true}, oci_port:fetch_rows(2, SelectBoundStmt)),
     ?ELog("Col ~p", [Col]),
-    ?assertEqual(ok, SelectBoundStmt:close()),
+    ?assertEqual(ok, oci_port:close(SelectBoundStmt)),
 
     % Drop function
-    DropFunStmt = OciSession:prep_sql(<<"drop function "?TESTFUNCTION>>),
-    ?assertEqual({executed, 0}, DropFunStmt:exec_stmt()),
-    ?assertEqual(ok, DropFunStmt:close()).
+    DropFunStmt = oci_port:prep_sql(<<"drop function "?TESTFUNCTION>>, OciSession),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(DropFunStmt)),
+    ?assertEqual(ok, oci_port:close(DropFunStmt)).
 
 procedure_scalar(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
     ?ELog("|             procedure_scalar                |"),
     ?ELog("+---------------------------------------------+"),
 
-    CreateProcedure = OciSession:prep_sql(<<"
+    CreateProcedure = oci_port:prep_sql(<<"
         create or replace procedure "
         ?TESTPROCEDURE
         "(p_first in number, p_second in out varchar2, p_result out number)
@@ -793,55 +797,55 @@ procedure_scalar(#{ocisession := OciSession}) ->
             p_result := p_first + to_number(p_second);
             p_second := 'The sum is ' || to_char(p_result);
         end "?TESTPROCEDURE";
-        ">>),
+        ">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, CreateProcedure),
-    ?assertEqual({executed, 0}, CreateProcedure:exec_stmt()),
-    ?assertEqual(ok, CreateProcedure:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(CreateProcedure)),
+    ?assertEqual(ok, oci_port:close(CreateProcedure)),
 
-    ExecStmt = OciSession:prep_sql(<<"begin "?TESTPROCEDURE"(:p_first,:p_second,:p_result); end;">>),
+    ExecStmt = oci_port:prep_sql(<<"begin "?TESTPROCEDURE"(:p_first,:p_second,:p_result); end;">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, ExecStmt),
-    ?assertMatch(ok, ExecStmt:bind_vars([ {<<":p_first">>, in, 'SQLT_INT'}
+    ?assertMatch(ok, oci_port:bind_vars([ {<<":p_first">>, in, 'SQLT_INT'}
                                         , {<<":p_second">>, inout, 'SQLT_CHR'}
-                                        , {<<":p_result">>, out, 'SQLT_INT'}])),
+                                        , {<<":p_result">>, out, 'SQLT_INT'}], ExecStmt)),
     ?assertEqual({executed, 1,
                   [{<<":p_second">>,<<"The sum is 51">>},
                    {<<":p_result">>,51}]},
-                 ExecStmt:exec_stmt([{50, <<"1             ">>, 3}], 1)),
+                 oci_port:exec_stmt([{50, <<"1             ">>, 3}], 1, ExecStmt)),
     ?assertEqual({executed, 1,
                   [{<<":p_second">>,<<"The sum is 6">>},
-                   {<<":p_result">>,6}]}, ExecStmt:exec_stmt([{5, <<"1             ">>, 3}], 1)),
-    ?assertEqual(ok, ExecStmt:close()),
+                   {<<":p_result">>,6}]}, oci_port:exec_stmt([{5, <<"1             ">>, 3}], 1, ExecStmt)),
+    ?assertEqual(ok, oci_port:close(ExecStmt)),
 
-    ExecStmt1 = OciSession:prep_sql(<<"call "?TESTPROCEDURE"(:p_first,:p_second,:p_result)">>),
+    ExecStmt1 = oci_port:prep_sql(<<"call "?TESTPROCEDURE"(:p_first,:p_second,:p_result)">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, ExecStmt1),
-    ?assertMatch(ok, ExecStmt1:bind_vars(
+    ?assertMatch(ok, oci_port:bind_vars(
                        [ {<<":p_first">>, in, 'SQLT_INT'}, {<<":p_second">>, inout, 'SQLT_CHR'},
-                         {<<":p_result">>, out, 'SQLT_INT'}])),
+                         {<<":p_result">>, out, 'SQLT_INT'}], ExecStmt1)),
     ?assertEqual({executed, 0,
                   [{<<":p_second">>,<<"The sum is 52">>}, {<<":p_result">>,52}]},
-                 ExecStmt1:exec_stmt([{50, <<"2             ">>, 3}], 1)),
+                 oci_port:exec_stmt([{50, <<"2             ">>, 3}], 1, ExecStmt1)),
     ?assertEqual({executed, 0,
                   [{<<":p_second">>,<<"The sum is 7">>},
-                   {<<":p_result">>,7}]}, ExecStmt1:exec_stmt([{5, <<"2             ">>, 3}], 1)),
-    ?assertEqual(ok, ExecStmt1:close()),
+                   {<<":p_result">>,7}]}, oci_port:exec_stmt([{5, <<"2             ">>, 3}], 1, ExecStmt1)),
+    ?assertEqual(ok, oci_port:close(ExecStmt1)),
 
-    ExecStmt2 = OciSession:prep_sql(<<"declare begin "?TESTPROCEDURE"(:p_first,:p_second,:p_result); end;">>),
+    ExecStmt2 = oci_port:prep_sql(<<"declare begin "?TESTPROCEDURE"(:p_first,:p_second,:p_result); end;">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, ExecStmt2),
-    ?assertMatch(ok, ExecStmt2:bind_vars([ {<<":p_first">>, in, 'SQLT_INT'}
+    ?assertMatch(ok, oci_port:bind_vars([ {<<":p_first">>, in, 'SQLT_INT'}
                                         , {<<":p_second">>, inout, 'SQLT_CHR'}
-                                        , {<<":p_result">>, out, 'SQLT_INT'}])),
+                                        , {<<":p_result">>, out, 'SQLT_INT'}], ExecStmt2)),
     ?assertEqual({executed, 1,
                   [{<<":p_second">>,<<"The sum is 53">>},
-                   {<<":p_result">>,53}]}, ExecStmt2:exec_stmt([{50, <<"3             ">>, 3}], 1)),
+                   {<<":p_result">>,53}]}, oci_port:exec_stmt([{50, <<"3             ">>, 3}], 1, ExecStmt2)),
     ?assertEqual({executed, 1,
                   [{<<":p_second">>,<<"The sum is 8">>},
-                   {<<":p_result">>,8}]}, ExecStmt2:exec_stmt([{5, <<"3             ">>, 3}], 1)),
-    ?assertEqual(ok, ExecStmt2:close()),
+                   {<<":p_result">>,8}]}, oci_port:exec_stmt([{5, <<"3             ">>, 3}], 1, ExecStmt2)),
+    ?assertEqual(ok, oci_port:close(ExecStmt2)),
 
     % Drop procedure
-    DropProcStmt = OciSession:prep_sql(<<"drop procedure "?TESTPROCEDURE>>),
-    ?assertEqual({executed, 0}, DropProcStmt:exec_stmt()),
-    ?assertEqual(ok, DropProcStmt:close()).
+    DropProcStmt = oci_port:prep_sql(<<"drop procedure "?TESTPROCEDURE>>, OciSession),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(DropProcStmt)),
+    ?assertEqual(ok, oci_port:close(DropProcStmt)).
 
 procedure_cur(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
@@ -853,10 +857,10 @@ procedure_cur(#{ocisession := OciSession}) ->
     flush_table(OciSession),
 
     ?ELog("inserting into table ~s", [?TESTTABLE]),
-    BoundInsStmt = OciSession:prep_sql(?INSERT),
+    BoundInsStmt = oci_port:prep_sql(?INSERT, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    ?assertMatch(ok, BoundInsStmt:bind_vars(?BIND_LIST)),
-    ?assertMatch({rowids, _}, BoundInsStmt:exec_stmt(
+    ?assertMatch(ok, oci_port:bind_vars(?BIND_LIST, BoundInsStmt)),
+    ?assertMatch({rowids, _}, oci_port:exec_stmt(
         [{ I                                                                                % pkey
          , list_to_binary(["_publisher_",integer_to_list(I),"_"])                           % publisher
          , I+I/2                                                                            % rank
@@ -867,11 +871,11 @@ procedure_cur(#{ocisession := OciSession}) ->
          , I*2+I/1000                                                                       % chapters
          , I                                                                                % votes_first_rank
          } || I <- lists:seq(1, RowCount)]
-        , 1
+        , 1, BoundInsStmt
     )),
-    ?assertEqual(ok, BoundInsStmt:close()),
+    ?assertEqual(ok, oci_port:close(BoundInsStmt)),
 
-    CreateProcedure = OciSession:prep_sql(<<"
+    CreateProcedure = oci_port:prep_sql(<<"
         create or replace procedure "
         ?TESTPROCEDURE
         "(p_cur out sys_refcursor)
@@ -879,25 +883,25 @@ procedure_cur(#{ocisession := OciSession}) ->
         begin
             open p_cur for select * from "?TESTTABLE";
         end "?TESTPROCEDURE";
-        ">>),
+        ">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, CreateProcedure),
-    ?assertEqual({executed, 0}, CreateProcedure:exec_stmt()),
-    ?assertEqual(ok, CreateProcedure:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(CreateProcedure)),
+    ?assertEqual(ok, oci_port:close(CreateProcedure)),
 
-    ExecStmt = OciSession:prep_sql(<<"begin "?TESTPROCEDURE"(:cursor); end;">>),
+    ExecStmt = oci_port:prep_sql(<<"begin "?TESTPROCEDURE"(:cursor); end;">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, ExecStmt),
-    ?assertMatch(ok, ExecStmt:bind_vars([{<<":cursor">>, out, 'SQLT_RSET'}])),
-    {executed, 1, [{<<":cursor">>, CurStmt}]} = ExecStmt:exec_stmt(),
-    {cols, _Cols} = CurStmt:exec_stmt(),
-    {{rows, Rows}, true} = CurStmt:fetch_rows(RowCount+1),
+    ?assertMatch(ok, oci_port:bind_vars([{<<":cursor">>, out, 'SQLT_RSET'}], ExecStmt)),
+    {executed, 1, [{<<":cursor">>, CurStmt}]} = oci_port:exec_stmt(ExecStmt),
+    {cols, _Cols} = oci_port:exec_stmt(CurStmt),
+    {{rows, Rows}, true} = oci_port:fetch_rows(RowCount+1, CurStmt),
     ?assertEqual(RowCount, length(Rows)),
-    ?assertEqual(ok, CurStmt:close()),
-    ?assertEqual(ok, ExecStmt:close()),
+    ?assertEqual(ok, oci_port:close(CurStmt)),
+    ?assertEqual(ok, oci_port:close(ExecStmt)),
 
     % Drop procedure
-    DropProcStmt = OciSession:prep_sql(<<"drop procedure "?TESTPROCEDURE>>),
-    ?assertEqual({executed, 0}, DropProcStmt:exec_stmt()),
-    ?assertEqual(ok, DropProcStmt:close()).
+    DropProcStmt = oci_port:prep_sql(<<"drop procedure "?TESTPROCEDURE>>, OciSession),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(DropProcStmt)),
+    ?assertEqual(ok, oci_port:close(DropProcStmt)).
 
 timestamp_interval_datatypes(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
@@ -926,24 +930,24 @@ timestamp_interval_datatypes(#{ocisession := OciSession}) ->
                      , {<<":ids">>, 'SQLT_INTERVAL_DS'}],
     SelectSql = <<"select * from "?TESTTABLE"">>,
 
-    DropStmt = OciSession:prep_sql(?DROP),
-    DropStmt:exec_stmt(),
-    DropStmt:close(),
+    DropStmt = oci_port:prep_sql(?DROP, OciSession),
+    oci_port:exec_stmt(DropStmt),
+    oci_port:close(DropStmt),
 
-    CreateStmt = OciSession:prep_sql(CreateSql),
+    CreateStmt = oci_port:prep_sql(CreateSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, CreateStmt),
-    ?assertEqual({executed, 0}, CreateStmt:exec_stmt()),
-    ?assertEqual(ok, CreateStmt:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(CreateStmt)),
+    ?assertEqual(ok, oci_port:close(CreateStmt)),
 
-    BoundInsStmt = OciSession:prep_sql(InsertNameSql),
+    BoundInsStmt = oci_port:prep_sql(InsertNameSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    ?assertMatch(ok, BoundInsStmt:bind_vars([{<<":name">>, 'SQLT_CHR'}])),
-    ?assertMatch({rowids, _}, BoundInsStmt:exec_stmt(
+    ?assertMatch(ok, oci_port:bind_vars([{<<":name">>, 'SQLT_CHR'}], BoundInsStmt)),
+    ?assertMatch({rowids, _}, oci_port:exec_stmt(
         [{list_to_binary(io_lib:format("'~s'", [D]))}
-         || D <- ["test1", "test2", "test3", "test4"]])),
-    ?assertMatch(ok, BoundInsStmt:close()),
+         || D <- ["test1", "test2", "test3", "test4"]], BoundInsStmt)),
+    ?assertMatch(ok, oci_port:close(BoundInsStmt)),
 
-    SelectStmt = OciSession:prep_sql(SelectSql),
+    SelectStmt = oci_port:prep_sql(SelectSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelectStmt),
     ?assertMatch({cols, [{<<"NAME">>,'SQLT_CHR',_,0,0}
                         ,{<<"DAT">>,'SQLT_DAT',7,0,0}
@@ -952,9 +956,9 @@ timestamp_interval_datatypes(#{ocisession := OciSession}) ->
                         ,{<<"TSLTZ">>,'SQLT_TIMESTAMP_LTZ',11,0,6}
                         ,{<<"IYM">>,'SQLT_INTERVAL_YM',5,3,0}
                         ,{<<"IDS">>,'SQLT_INTERVAL_DS',11,2,3}]}
-                 , SelectStmt:exec_stmt()),
-    RowRet = SelectStmt:fetch_rows(5),
-    ?assertEqual(ok, SelectStmt:close()),
+                 , oci_port:exec_stmt(SelectStmt)),
+    RowRet = oci_port:fetch_rows(5, SelectStmt),
+    ?assertEqual(ok, oci_port:close(SelectStmt)),
 
     ?assertMatch({{rows, _}, true}, RowRet),
     {{rows, Rows}, true} = RowRet,
@@ -975,19 +979,19 @@ timestamp_interval_datatypes(#{ocisession := OciSession}) ->
           , oci_util:to_intv({C7D+1,C7H+1,C7M+1,C7S+1,C7Ns+1})}
      end
      || [C1, C2, C3, C4, C5, C6, C7] <- Rows],
-    BoundAllInsStmt = OciSession:prep_sql(InsertSql),
+    BoundAllInsStmt = oci_port:prep_sql(InsertSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundAllInsStmt),
-    ?assertMatch(ok, BoundAllInsStmt:bind_vars(InsertBindSpec)),
-    Inserted = BoundAllInsStmt:exec_stmt(NewRows),
+    ?assertMatch(ok, oci_port:bind_vars(InsertBindSpec, BoundAllInsStmt)),
+    Inserted = oci_port:exec_stmt(NewRows, BoundAllInsStmt),
     ?assertMatch({rowids, _}, Inserted),
     {rowids, RowIds} = Inserted,
     ?assertEqual(length(NewRows), length(RowIds)),
-    ?assertMatch(ok, BoundAllInsStmt:close()),
+    ?assertMatch(ok, oci_port:close(BoundAllInsStmt)),
 
-    DropStmtFinal = OciSession:prep_sql(?DROP),
+    DropStmtFinal = oci_port:prep_sql(?DROP, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, DropStmtFinal),
-    ?assertEqual({executed, 0}, DropStmtFinal:exec_stmt()),
-    ?assertEqual(ok, DropStmtFinal:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(DropStmtFinal)),
+    ?assertEqual(ok, oci_port:close(DropStmtFinal)),
     ok.
 
 stmt_reuse_onerror(#{ocisession := OciSession}) ->
@@ -998,28 +1002,28 @@ stmt_reuse_onerror(#{ocisession := OciSession}) ->
     CreateSql = <<"create table "?TESTTABLE" (unique_num number not null primary key)">>,
     InsertSql = <<"insert into "?TESTTABLE" (unique_num) values (:unique_num)">>,
 
-    DropStmt = OciSession:prep_sql(?DROP),
-    DropStmt:exec_stmt(),
-    DropStmt:close(),
+    DropStmt = oci_port:prep_sql(?DROP, OciSession),
+    oci_port:exec_stmt(DropStmt),
+    oci_port:close(DropStmt),
 
-    CreateStmt = OciSession:prep_sql(CreateSql),
+    CreateStmt = oci_port:prep_sql(CreateSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, CreateStmt),
-    ?assertEqual({executed, 0}, CreateStmt:exec_stmt()),
-    ?assertEqual(ok, CreateStmt:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(CreateStmt)),
+    ?assertEqual(ok, oci_port:close(CreateStmt)),
 
-    BoundInsStmt = OciSession:prep_sql(InsertSql),
+    BoundInsStmt = oci_port:prep_sql(InsertSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    ?assertMatch(ok, BoundInsStmt:bind_vars([{<<":unique_num">>, 'SQLT_INT'}])),
-    ?assertMatch({rowids, _}, BoundInsStmt:exec_stmt([{1}])),
-    ?assertMatch({error,{1,<<"ORA-00001",_/binary>>}}, BoundInsStmt:exec_stmt([{1}])),
-    ?assertMatch({rowids, _}, BoundInsStmt:exec_stmt([{2}])),
-    ?assertMatch({error,{1,<<"ORA-00001",_/binary>>}}, BoundInsStmt:exec_stmt([{2}])),
-    ?assertMatch(ok, BoundInsStmt:close()),
+    ?assertMatch(ok, oci_port:bind_vars([{<<":unique_num">>, 'SQLT_INT'}], BoundInsStmt)),
+    ?assertMatch({rowids, _}, oci_port:exec_stmt([{1}], BoundInsStmt)),
+    ?assertMatch({error,{1,<<"ORA-00001",_/binary>>}}, oci_port:exec_stmt([{1}], BoundInsStmt)),
+    ?assertMatch({rowids, _}, oci_port:exec_stmt([{2}], BoundInsStmt)),
+    ?assertMatch({error,{1,<<"ORA-00001",_/binary>>}}, oci_port:exec_stmt([{2}], BoundInsStmt)),
+    ?assertMatch(ok, oci_port:close(BoundInsStmt)),
 
-    DropStmtFinal = OciSession:prep_sql(?DROP),
+    DropStmtFinal = oci_port:prep_sql(?DROP, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, DropStmtFinal),
-    ?assertEqual({executed, 0}, DropStmtFinal:exec_stmt()),
-    ?assertEqual(ok, DropStmtFinal:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(DropStmtFinal)),
+    ?assertEqual(ok, oci_port:close(DropStmtFinal)),
     ok.
 
 multiple_bind_reuse(#{ocisession := OciSession}) ->
@@ -1046,30 +1050,30 @@ multiple_bind_reuse(#{ocisession := OciSession}) ->
     SelectSql = <<"select * from "?TESTTABLE"">>,
     InsertBindVars = [{list_to_binary(BC), 'SQLT_CHR'} || BC <- BindVarCols],
 
-    DropStmt = OciSession:prep_sql(?DROP),
-    DropStmt:exec_stmt(),
-    DropStmt:close(),
+    DropStmt = oci_port:prep_sql(?DROP, OciSession),
+    oci_port:exec_stmt(DropStmt),
+    oci_port:close(DropStmt),
 
     Data = [list_to_tuple([lists:nth(rand:uniform(3),
                                      [<<"">>, <<"big">>, <<"small">>])
                            || _ <- Cols]) || _ <- lists:seq(1, 10)],
 
-    CreateStmt = OciSession:prep_sql(CreateSql),
+    CreateStmt = oci_port:prep_sql(CreateSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, CreateStmt),
-    ?assertEqual({executed, 0}, CreateStmt:exec_stmt()),
-    ?assertEqual(ok, CreateStmt:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(CreateStmt)),
+    ?assertEqual(ok, oci_port:close(CreateStmt)),
 
-    BoundInsStmt = OciSession:prep_sql(InsertSql),
+    BoundInsStmt = oci_port:prep_sql(InsertSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, BoundInsStmt),
-    ?assertMatch(ok, BoundInsStmt:bind_vars(InsertBindVars)),
-    [?assertMatch({rowids, _}, BoundInsStmt:exec_stmt([R])) || R <- Data],
+    ?assertMatch(ok, oci_port:bind_vars(InsertBindVars, BoundInsStmt)),
+    [?assertMatch({rowids, _}, oci_port:exec_stmt([R], BoundInsStmt)) || R <- Data],
 
-    SelectStmt = OciSession:prep_sql(SelectSql),
+    SelectStmt = oci_port:prep_sql(SelectSql, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelectStmt),
     ?assertEqual({cols, [{list_to_binary(string:to_upper(C)),'SQLT_CHR',60,0,0}
                         || C <- Cols]},
-                 SelectStmt:exec_stmt()),
-    {{rows, Rows}, true} = SelectStmt:fetch_rows(length(Data)+1),
+                 oci_port:exec_stmt(SelectStmt)),
+    {{rows, Rows}, true} = oci_port:fetch_rows(length(Data)+1, SelectStmt),
     {Error, _, _} =
     lists:foldl(fun(_I, {Flag, [ID|Insert], [ID|Select]}) ->
                         %% ?debugFmt("~p. expected ~p", [I, ID]),
@@ -1082,37 +1086,37 @@ multiple_bind_reuse(#{ocisession := OciSession}) ->
                 end, {false, Data, [list_to_tuple(R) || R <- Rows]},
                 lists:seq(1, length(Data))),
     ?assertEqual(false, Error),
-    ?assertEqual(ok, SelectStmt:close()),
+    ?assertEqual(ok, oci_port:close(SelectStmt)),
 
-    ?assertMatch(ok, BoundInsStmt:close()),
+    ?assertMatch(ok, oci_port:close(BoundInsStmt)),
 
-    DropStmtFinal = OciSession:prep_sql(?DROP),
+    DropStmtFinal = oci_port:prep_sql(?DROP, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, DropStmtFinal),
-    ?assertEqual({executed, 0}, DropStmtFinal:exec_stmt()),
-    ?assertEqual(ok, DropStmtFinal:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(DropStmtFinal)),
+    ?assertEqual(ok, oci_port:close(DropStmtFinal)),
     ok.
 
 
 -define(current_pool_session_ids(__OciSession),
         (fun(OciSess) ->
-                 Stmt = OciSess:prep_sql(?SESSSQL),
-                 ?assertMatch({cols, _}, Stmt:exec_stmt()),
-                 {{rows, CurSessions}, true} = Stmt:fetch_rows(10000),
-                 ?assertEqual(ok, Stmt:close()),
+                 Stmt = oci_port:prep_sql(?SESSSQL, OciSess),
+                 ?assertMatch({cols, _}, oci_port:exec_stmt(Stmt)),
+                 {{rows, CurSessions}, true} = oci_port:fetch_rows(10000, Stmt),
+                 ?assertEqual(ok, oci_port:close(Stmt)),
                  CurSessions
          end)(__OciSession)).
 
 -define(kill_session(__OciSession, __SessionToKill),
         (fun(OciSessKS, Sess2Kill) ->
-                 StmtKS = OciSessKS:prep_sql(
+                 StmtKS = oci_port:prep_sql(
                             <<"alter system kill session '", Sess2Kill/binary,
-                              "' immediate">>),
-                 case StmtKS:exec_stmt() of
+                              "' immediate">>, OciSessKS),
+                 case oci_port:exec_stmt(StmtKS) of
                      {error,{30, _}} -> ok;
                      {error,{31, _}} -> ok;
                      {executed, 0} -> ?ELog("~p closed", [Sess2Kill])
                  end,
-                 ?assertEqual(ok, StmtKS:close())
+                 ?assertEqual(ok, oci_port:close(StmtKS))
          end)(__OciSession, __SessionToKill)).
 
 check_ping(#{ocisession := OciSession, conf := #{tns := Tns, user := User, password := Pswd}}) ->
@@ -1123,15 +1127,15 @@ check_ping(#{ocisession := OciSession, conf := #{tns := Tns, user := User, passw
     %% Connection with ping timeout set to 1 second
     PingOciPort = erloci:new([{logging, true}, {ping_timeout, 1000},
                               {env, [{"NLS_LANG", "GERMAN_SWITZERLAND.AL32UTF8"}]}]),
-    PingOciSession = PingOciPort:get_session(Tns, User, Pswd),
+    PingOciSession = oci_port:get_session(Tns, User, Pswd, PingOciPort),
     SessionsAfter = ?current_pool_session_ids(OciSession),
     [PingSession | _] = lists:flatten(SessionsAfter) -- lists:flatten(SessionsBefore),
-    ?assertEqual(pong, PingOciSession:ping()),
+    ?assertEqual(pong, oci_port:ping(PingOciSession)),
     ?assertEqual(ok, ?kill_session(OciSession, PingSession)),
     ?debugMsg("sleeping for 2 seconds so that ping would realize the session is dead"),
     timer:sleep(2000),
-    ?assertEqual(pang, PingOciSession:ping()),
-    PingOciPort:close().
+    ?assertEqual(pang, oci_port:ping(PingOciSession)),
+    oci_port:close(PingOciPort).
 
 check_session_without_ping(#{ocisession := OciSession,
                              conf := #{tns := Tns, user := User, password := Pswd}}) ->
@@ -1141,14 +1145,14 @@ check_session_without_ping(#{ocisession := OciSession,
     SessionsBefore = ?current_pool_session_ids(OciSession),
     Opts = [{logging, true}, {env, [{"NLS_LANG", "GERMAN_SWITZERLAND.AL32UTF8"}]}],
     NoPingOciPort = erloci:new(Opts),
-    NoPingOciSession = NoPingOciPort:get_session(Tns, User, Pswd),
-    SelStmt1 = NoPingOciSession:prep_sql(<<"select 4+4 from dual">>),
+    NoPingOciSession = oci_port:get_session(Tns, User, Pswd, NoPingOciPort),
+    SelStmt1 = oci_port:prep_sql(<<"select 4+4 from dual">>, NoPingOciSession),
     SessionsAfter = ?current_pool_session_ids(OciSession),
-    ?assertMatch({cols, _}, SelStmt1:exec_stmt()),
+    ?assertMatch({cols, _}, oci_port:exec_stmt(SelStmt1)),
     [NoPingSession | _] = lists:flatten(SessionsAfter) -- lists:flatten(SessionsBefore),
     ?assertEqual(ok, ?kill_session(OciSession, NoPingSession)),
-    ?assertMatch({error, {3113, _}}, SelStmt1:exec_stmt()),
-    NoPingOciPort:close().
+    ?assertMatch({error, {3113, _}}, oci_port:exec_stmt(SelStmt1)),
+    oci_port:close(NoPingOciPort).
 
 check_session_with_ping(#{ocisession := OciSession, conf := #{tns := Tns, user := User, password := Pswd}}) ->
     ?ELog("+---------------------------------------------+"),
@@ -1158,65 +1162,65 @@ check_session_with_ping(#{ocisession := OciSession, conf := #{tns := Tns, user :
     %% Connection with ping timeout set to 1 second
     Opts = [{logging, true}, {ping_timeout, 1000}, {env, [{"NLS_LANG", "GERMAN_SWITZERLAND.AL32UTF8"}]}],
     PingOciPort = erloci:new(Opts),
-    PingOciSession = PingOciPort:get_session(Tns, User, Pswd),
-    SelStmt1 = PingOciSession:prep_sql(<<"select 4+4 from dual">>),
+    PingOciSession = oci_port:get_session(Tns, User, Pswd, PingOciPort),
+    SelStmt1 = oci_port:prep_sql(<<"select 4+4 from dual">>, PingOciSession),
     SessionsAfter = ?current_pool_session_ids(OciSession),
-    ?assertMatch({cols, _}, SelStmt1:exec_stmt()),
+    ?assertMatch({cols, _}, oci_port:exec_stmt(SelStmt1)),
     [NoPingSession | _] = lists:flatten(SessionsAfter) -- lists:flatten(SessionsBefore),
     ?assertEqual(ok, ?kill_session(OciSession, NoPingSession)),
     timer:sleep(2000),
-    ?assertMatch({'EXIT', {noproc, _}}, catch SelStmt1:exec_stmt()),
-    PingOciPort:close().
+    ?assertMatch({'EXIT', {noproc, _}}, catch oci_port:exec_stmt(SelStmt1)),
+    oci_port:close(PingOciPort).
 
 urowid(#{ocisession := OciSession}) ->
     ?ELog("+---------------------------------------------+"),
     ?ELog("|                  urowid                     |"),
     ?ELog("+---------------------------------------------+"),
 
-    CreateStmt = OciSession:prep_sql(
+    CreateStmt = oci_port:prep_sql(
                    <<"create table "?TESTTABLE" ("
                        " c1 number,"
                        " c2 varchar2(3000),"
                        " primary key(c1, c2))"
-                     " organization index">>),
+                     " organization index">>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, CreateStmt),
-    ?assertEqual({executed, 0}, CreateStmt:exec_stmt()),
-    ?assertEqual(ok, CreateStmt:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(CreateStmt)),
+    ?assertEqual(ok, oci_port:close(CreateStmt)),
 
     ?ELog("testing insert returns UROWID"),
     [begin
-         StmtInsert = OciSession:prep_sql(
+         StmtInsert = oci_port:prep_sql(
                         <<"insert into "?TESTTABLE" values(",
                           (integer_to_binary(I))/binary, ",'",
                           (list_to_binary(
                              lists:duplicate(crypto:rand_uniform(1000,3000), I))
-                          )/binary, "')">>),
+                          )/binary, "')">>, OciSession),
         ?assertMatch({?PORT_MODULE, statement, _, _, _}, StmtInsert),
-        ?assertMatch({rowids, [_]}, StmtInsert:exec_stmt()),
-        ?assertEqual(ok, StmtInsert:close())
+        ?assertMatch({rowids, [_]}, oci_port:exec_stmt(StmtInsert)),
+        ?assertEqual(ok, oci_port:close(StmtInsert))
      end || I <- lists:seq($0,$9)],
 
     ?ELog("testing select UROWID"),
-    SelectStmt = OciSession:prep_sql(<<"select rowid, c1 from "?TESTTABLE>>),
+    SelectStmt = oci_port:prep_sql(<<"select rowid, c1 from "?TESTTABLE>>, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, SelectStmt),
-    ?assertMatch({cols, _}, SelectStmt:exec_stmt()),
-    {{rows, Rows}, true} = SelectStmt:fetch_rows(100),
-    ?assertEqual(ok, SelectStmt:close()),
+    ?assertMatch({cols, _}, oci_port:exec_stmt(SelectStmt)),
+    {{rows, Rows}, true} = oci_port:fetch_rows(100, SelectStmt),
+    ?assertEqual(ok, oci_port:close(SelectStmt)),
 
     ?ELog("testing update UROWID"),
-    BoundUpdStmt = OciSession:prep_sql(
+    BoundUpdStmt = oci_port:prep_sql(
                      <<"update "?TESTTABLE" set c1 = :p_c1"
-                       " where "?TESTTABLE".rowid = :p_rowid">>),
-    ?assertMatch(ok, BoundUpdStmt:bind_vars([{<<":p_c1">>, 'SQLT_INT'},
-                                             {<<":p_rowid">>, 'SQLT_STR'}])),
+                       " where "?TESTTABLE".rowid = :p_rowid">>, OciSession),
+    ?assertMatch(ok, oci_port:bind_vars([{<<":p_c1">>, 'SQLT_INT'},
+                                             {<<":p_rowid">>, 'SQLT_STR'}], BoundUpdStmt)),
     ?assertMatch({rowids, _},
-                 BoundUpdStmt:exec_stmt(
+                 oci_port:exec_stmt(
                    [{$0 + $9 - list_to_integer(oci_util:from_num(C1)), RowId}
-                    || [RowId, C1] <- Rows], -1)),
-    ?assertMatch(ok, BoundUpdStmt:close()),
+                    || [RowId, C1] <- Rows], -1, BoundUpdStmt)),
+    ?assertMatch(ok, oci_port:close(BoundUpdStmt)),
 
-    DropStmtFinal = OciSession:prep_sql(?DROP),
+    DropStmtFinal = oci_port:prep_sql(?DROP, OciSession),
     ?assertMatch({?PORT_MODULE, statement, _, _, _}, DropStmtFinal),
-    ?assertEqual({executed, 0}, DropStmtFinal:exec_stmt()),
-    ?assertEqual(ok, DropStmtFinal:close()),
+    ?assertEqual({executed, 0}, oci_port:exec_stmt(DropStmtFinal)),
+    ?assertEqual(ok, oci_port:close(DropStmtFinal)),
     ok.

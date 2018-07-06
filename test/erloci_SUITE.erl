@@ -50,7 +50,7 @@ end_per_suite(ConfigData) ->
         [{logging, Logging},
             {env, [{"NLS_LANG", Lang}]}
         ]),
-    OciSession = OciPort:get_session(Tns, User, Pswd),
+    OciSession = oci_port:get_session(Tns, User, Pswd, OciPort),
     [tab_drop(OciSession, Table) || Table <- Tables],
     ct:pal(info, "Finishing...", []).
 
@@ -73,10 +73,10 @@ load(ConfigData) ->
         || C <- ?CONNIDLIST],
     collect_processes(lists:sort(Tables), []),
     ct:pal(info, "Closing port ~p", [OciPort]),
-    ok = OciPort:close().
+    ok = oci_port:close(OciPort).
 
 connection(OciPort, Cid, Tables, Tns, User, Pswd, Master, RowsPerProcess, Binds) ->
-    OciSession = OciPort:get_session(Tns, User, Pswd),
+    OciSession = oci_port:get_session(Tns, User, Pswd, OciPort),
     ct:pal(info, "Got session ~p", [OciSession]),
     [begin
          tab_drop(OciSession, Table),
@@ -90,7 +90,7 @@ connection(OciPort, Cid, Tables, Tns, User, Pswd, Master, RowsPerProcess, Binds)
         || Tid <- ?STMTIDLIST],
     collect_processes(lists:sort(Tables), []),
     ct:pal(info, "Closing session ~p", [OciSession]),
-    ok = OciSession:close(),
+    ok = oci_port:close(OciSession),
     Master ! {Cid, Tables}.
 
 table(OciSession, Cid, Tid, Master, RowsPerProcess, Binds) ->
@@ -155,41 +155,41 @@ collect_processes(Tables, Acc) ->
 ).
 
 tab_drop(OciSession, Table) when is_list(Table) ->
-    DropStmt = OciSession:prep_sql(?B(["drop table ", Table])),
+    DropStmt = oci_port:prep_sql(?B(["drop table ", Table]), OciSession),
     {oci_port, statement, _, _, _} = DropStmt,
-    case DropStmt:exec_stmt() of
+    case oci_port:exec_stmt(DropStmt)of
         {error, _} -> ok;
         _ ->
             %ct:pal(info, "[~s] Droped!", [Table]),
-            ok = DropStmt:close()
+            ok = oci_port:close(DropStmt)
     end.
 
 tab_create(OciSession, Table) when is_list(Table) ->
-    StmtCreate = OciSession:prep_sql(?CREATE(Table)),
+    StmtCreate = oci_port:prep_sql(?CREATE(Table), OciSession),
     {oci_port, statement, _, _, _} = StmtCreate,
-    {executed, 0} = StmtCreate:exec_stmt(),
-    ok = StmtCreate:close(),
+    {executed, 0} = oci_port:exec_stmt(StmtCreate),
+    ok = oci_port:close(StmtCreate),
     ct:pal(info, "[~s] Created", [Table]).
 
 tab_load(OciSession, Table, RowCount, Binds) ->
-    BoundInsStmt = OciSession:prep_sql(?INSERT(Table)),
+    BoundInsStmt = oci_port:prep_sql(?INSERT(Table), OciSession),
     {oci_port, statement, _, _, _} = BoundInsStmt,
-    BoundInsStmtRes = BoundInsStmt:bind_vars(?BIND_LIST),
+    BoundInsStmtRes = oci_port:bind_vars(?BIND_LIST, BoundInsStmt),
     ok = BoundInsStmtRes,
-    {rowids, RowIds} = BoundInsStmt:exec_stmt(Binds),
+    {rowids, RowIds} = oci_port:exec_stmt(Binds, BoundInsStmt),
     RowCount = length(RowIds),
-    ok = BoundInsStmt:close(),
+    ok = oci_port:close(BoundInsStmt),
     ct:pal(info, "[~s] Loaded ~p rows", [Table, RowCount]).
 
 tab_access(OciSession, Table, Count) ->
     ct:pal(info, "[~s]  Loading rows @ ~p per fetch", [Table, Count]),
-    SelStmt = OciSession:prep_sql(?SELECT_WITH_ROWID(Table)),
+    SelStmt = oci_port:prep_sql(?SELECT_WITH_ROWID(Table), OciSession),
     {oci_port, statement, _, _, _} = SelStmt,
-    {cols, Cols} = SelStmt:exec_stmt(),
+    {cols, Cols} = oci_port:exec_stmt(SelStmt),
     ct:pal(info, "[~s] Selected columns ~p", [Table, Cols]),
     10 = length(Cols),
-    load_rows_to_end(Table, SelStmt:fetch_rows(Count), SelStmt, Count, 0),
-    ok = SelStmt:close(),
+    load_rows_to_end(Table, oci_port:fetch_rows(Count, SelStmt), SelStmt, Count, 0),
+    ok = oci_port:close(SelStmt),
     ok.
 
 load_rows_to_end(Table, {{rows, Rows}, true}, _, _, Total) ->
@@ -197,8 +197,8 @@ load_rows_to_end(Table, {{rows, Rows}, true}, _, _, Total) ->
     ct:pal(info, "[~s] Loaded ~p / ~p rows - Finished", [Table, Loaded, Total + Loaded]);
 load_rows_to_end(Table, {error, Error}, SelStmt, Count, Total) ->
     ct:pal(info, "[~s] Loaded ~p error - ~p", [Table, Total, Error]),
-    load_rows_to_end(Table, SelStmt:fetch_rows(Count), SelStmt, Count, Total);
+    load_rows_to_end(Table, oci_port:fetch_rows(Count, SelStmt), SelStmt, Count, Total);
 load_rows_to_end(Table, {{rows, Rows}, false}, SelStmt, Count, Total) ->
     Loaded = length(Rows),
     ct:pal(info, "[~s] Loaded ~p / ~p", [Table, Loaded, Total + Loaded]),
-    load_rows_to_end(Table, SelStmt:fetch_rows(Count), SelStmt, Count, Total + Loaded).
+    load_rows_to_end(Table, oci_port:fetch_rows(Count, SelStmt), SelStmt, Count, Total + Loaded).
