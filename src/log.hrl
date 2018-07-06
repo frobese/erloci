@@ -46,7 +46,7 @@ end)()).
 (fun() ->
     %__LMod:log({?LLVL(__L), __T, atom_to_list(?MODULE), "", ?LINE, lists:flatten(io_lib:format(__F, __A))})
     Module = element(1, __LMod), % Tuple calls have been removed in OTP/21
-    Module:log({?LLVL(__L), __T, atom_to_list(?MODULE), "", ?LINE, lists:flatten(io_lib:format(__F, __A))}, __LMod),
+    Module:log({?LLVL(__L), __T, atom_to_list(?MODULE), "", ?LINE, lists:flatten(io_lib:format(__F, __A))}, __LMod)
 end)()
 ).
 
