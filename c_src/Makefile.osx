@@ -12,8 +12,12 @@ endif
 MKDIR_P = mkdir -p
 ERLOCI_PATH = $(SRC_PATH_PREFIX)erloci_drv
 ERLOCI_LIB_PATH = $(SRC_PATH_PREFIX)erloci_lib
-OCI_INCLUDE_PATH = $(INSTANT_CLIENT_INCLUDE_PATH)
-OCI_LIB_PATH = $(INSTANT_CLIENT_LIB_PATH)
+OCI_INCLUDE_PATH = $(realpath INSTANT_CLIENT_INCLUDE_PATH)
+OCI_LIB_PATH = $(realpath INSTANT_CLIENT_LIB_PATH)
+
+INSTANT_CLIENT_LIB=$(shell find {.,..,../..,../../..} -name libocci\.\* -print -quit)
+INSTANT_CLIENT_LIB_PATH := $(dir $(INSTANT_CLIENT_LIB))
+INSTANT_CLIENT_INCLUDE_PATH := $(INSTANT_CLIENT_LIB_PATH)/sdk/include
 
 ERLOCI_LIB_HDRS = $(wildcard $(addprefix $(ERLOCI_LIB_PATH)/, *.h))
 ERLOCI_LIB_SRCS = $(wildcard $(addprefix $(ERLOCI_LIB_PATH)/, *.cpp))
@@ -23,13 +27,25 @@ ERLOCI_HDRS = $(wildcard $(addprefix $(ERLOCI_PATH)/, *.h))
 ERLOCI_SRCS = $(wildcard $(addprefix $(ERLOCI_PATH)/, *.cpp))
 ERLOCI_OBJS = $(ERLOCI_SRCS:.cpp=.o)
 
+ERL_BIN := $(shell command -v erl 2> /dev/null)
+ERL_BIN_DIR := $(dir $(ERL_BIN))
+ERL_INTERFACE_DIR ?= $(realpath $(ERL_BIN_DIR)../../usr)
+
 ifeq "$(LIBEVENT_INCLUDE_PATH)" ""
-	LIBEVENT_CFLAGS = 
+	ifeq "$(shell command -v pkg-config 2> /dev/null)" ""
+		LIBEVENT_CFLAGS = 
+	else
+		LIBEVENT_CFLAGS = $(shell pkg-config libevent --cflags-only-I --silence-errors)
+	endif
 else
 	LIBEVENT_CFLAGS = -I$(LIBEVENT_INCLUDE_PATH)
 endif
 ifeq "$(LIBEVENT_LIB_PATH)" ""
-	LIBEVENT_LDFLAGS = 
+	ifeq "$(shell command -v pkg-config 2> /dev/null)" ""
+		LIBEVENT_LDFLAGS = 
+	else
+		LIBEVENT_LDFLAGS = $(shell pkg-config libevent --libs-only-L --silence-errors)
+	endif
 else
 	LIBEVENT_LDFLAGS = -L$(LIBEVENT_LIB_PATH)
 endif
