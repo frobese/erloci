@@ -12,10 +12,10 @@ endif
 MKDIR_P = mkdir -p
 ERLOCI_PATH = $(SRC_PATH_PREFIX)erloci_drv
 ERLOCI_LIB_PATH = $(SRC_PATH_PREFIX)erloci_lib
-OCI_INCLUDE_PATH = $(realpath INSTANT_CLIENT_INCLUDE_PATH)
-OCI_LIB_PATH = $(realpath INSTANT_CLIENT_LIB_PATH)
+OCI_INCLUDE_PATH = $(realpath $(INSTANT_CLIENT_INCLUDE_PATH))
+OCI_LIB_PATH = $(realpath $(INSTANT_CLIENT_LIB_PATH))
 
-INSTANT_CLIENT_LIB=$(shell find {.,..,../..,../../..} -name libocci\.\* -print -quit)
+INSTANT_CLIENT_LIB=$(shell find {.,..,../..}{,/../../..} -name libocci\.\* -print -quit)
 INSTANT_CLIENT_LIB_PATH := $(dir $(INSTANT_CLIENT_LIB))
 INSTANT_CLIENT_INCLUDE_PATH := $(INSTANT_CLIENT_LIB_PATH)/sdk/include
 
