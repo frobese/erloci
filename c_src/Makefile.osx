@@ -12,12 +12,6 @@ endif
 MKDIR_P = mkdir -p
 ERLOCI_PATH = $(SRC_PATH_PREFIX)erloci_drv
 ERLOCI_LIB_PATH = $(SRC_PATH_PREFIX)erloci_lib
-OCI_INCLUDE_PATH = $(realpath $(INSTANT_CLIENT_INCLUDE_PATH))
-OCI_LIB_PATH = $(realpath $(INSTANT_CLIENT_LIB_PATH))
-
-INSTANT_CLIENT_LIB=$(shell find {.,..,../..}{,/../../..} -name libocci\.\* -print -quit)
-INSTANT_CLIENT_LIB_PATH := $(dir $(INSTANT_CLIENT_LIB))
-INSTANT_CLIENT_INCLUDE_PATH := $(INSTANT_CLIENT_LIB_PATH)/sdk/include
 
 ERLOCI_LIB_HDRS = $(wildcard $(addprefix $(ERLOCI_LIB_PATH)/, *.h))
 ERLOCI_LIB_SRCS = $(wildcard $(addprefix $(ERLOCI_LIB_PATH)/, *.cpp))
@@ -27,36 +21,66 @@ ERLOCI_HDRS = $(wildcard $(addprefix $(ERLOCI_PATH)/, *.h))
 ERLOCI_SRCS = $(wildcard $(addprefix $(ERLOCI_PATH)/, *.cpp))
 ERLOCI_OBJS = $(ERLOCI_SRCS:.cpp=.o)
 
-ERL_BIN := $(shell command -v erl 2> /dev/null)
-ERL_BIN_DIR := $(dir $(ERL_BIN))
-ERL_INTERFACE_DIR ?= $(realpath $(ERL_BIN_DIR)../../usr)
+ERL_INTERFACE_DIR ?= $(ERLANG_ROOT_DIR)/usr
+
+$(info Using ERL_INTERFACE_DIR=$(ERL_INTERFACE_DIR))
+
+# e.g. INSTANT_CLIENT_LIB_PATH     = ../../instantclient_12_1/
+# e.g. INSTANT_CLIENT_INCLUDE_PATH = ../../instantclient_12_1/sdk/include/
+OCI_LOCAL_FOUND := $(firstword $(wildcard */libocci.* ../*/libocci.* ../../*/libocci.* ../../../*/libocci.* ../../../../*/libocci.* ../../../../../*/libocci.*))
+# e.g. INSTANT_CLIENT_LIB_PATH     = /usr/lib/oracle/12.1/client64/lib/
+# e.g. INSTANT_CLIENT_INCLUDE_PATH = /usr/include/oracle/12.1/client64/
+OCI_GLOBAL_FOUND := $(firstword $(wildcard /usr/lib/oracle/*/client64/lib/libocci.*))
+# e.g. INSTANT_CLIENT_LIB_PATH     = /usr/local/Cellar/instantclient-basic/12.2.0.1.0-2/lib/
+# e.g. INSTANT_CLIENT_INCLUDE_PATH = /usr/local/Cellar/instantclient-sdk/12.2.0.1.0-2/include/
+OCI_BREW_FOUND := $(firstword $(wildcard /usr/local/Cellar/instantclient-basic/*/lib/libocci.*))
+ifneq "$(OCI_LOCAL_FOUND)" ""
+	INSTANT_CLIENT_LIB_PATH ?= $(dir $(OCI_LOCAL_FOUND))
+	INSTANT_CLIENT_INCLUDE_PATH ?= $(INSTANT_CLIENT_LIB_PATH)sdk/include
+endif
+ifneq "$(OCI_GLOBAL_FOUND)" ""
+	INSTANT_CLIENT_LIB_PATH ?= $(dir $(OCI_GLOBAL_FOUND))
+	INSTANT_CLIENT_INCLUDE_PATH ?= $(subst lib/oracle,include/oracle,$(INSTANT_CLIENT_LIB_PATH:/lib/=/))
+endif
+ifneq "$(OCI_BREW_FOUND)" ""
+	INSTANT_CLIENT_LIB_PATH ?= $(dir $(OCI_BREW_FOUND))
+	INSTANT_CLIENT_INCLUDE_PATH ?= $(subst instantclient-basic,instantclient-sdk,$(INSTANT_CLIENT_LIB_PATH:/lib/=/include/))
+endif
+ifeq "$(INSTANT_CLIENT_LIB_PATH)" ""
+	$(error Oracle Instantclient not found. Set INSTANT_CLIENT_LIB_PATH and INSTANT_CLIENT_INCLUDE_PATH)
+endif
+
+$(info Using INSTANT_CLIENT_LIB_PATH=$(INSTANT_CLIENT_LIB_PATH))
+$(info Using INSTANT_CLIENT_INCLUDE_PATH=$(INSTANT_CLIENT_INCLUDE_PATH))
 
 ifeq "$(LIBEVENT_INCLUDE_PATH)" ""
 	ifeq "$(shell command -v pkg-config 2> /dev/null)" ""
-		LIBEVENT_CFLAGS = 
+		LIBEVENT_CFLAGS :=
 	else
-		LIBEVENT_CFLAGS = $(shell pkg-config libevent --cflags-only-I --silence-errors)
+		LIBEVENT_CFLAGS := $(shell pkg-config libevent --cflags-only-I --silence-errors)
 	endif
 else
-	LIBEVENT_CFLAGS = -I$(LIBEVENT_INCLUDE_PATH)
+	LIBEVENT_CFLAGS := -I$(LIBEVENT_INCLUDE_PATH)
 endif
 ifeq "$(LIBEVENT_LIB_PATH)" ""
 	ifeq "$(shell command -v pkg-config 2> /dev/null)" ""
-		LIBEVENT_LDFLAGS = 
+		LIBEVENT_LDFLAGS :=
 	else
-		LIBEVENT_LDFLAGS = $(shell pkg-config libevent --libs-only-L --silence-errors)
+		LIBEVENT_LDFLAGS := $(shell pkg-config libevent --libs-only-L --silence-errors)
 	endif
 else
-	LIBEVENT_LDFLAGS = -L$(LIBEVENT_LIB_PATH)
+	LIBEVENT_LDFLAGS := -L$(LIBEVENT_LIB_PATH)
 endif
 
-CXXFLAGS = -ggdb -Wall -I$(ERL_INTERFACE_DIR)/include  -I$(ERLOCI_PATH) -I$(ERLOCI_LIB_PATH) -I$(OCI_INCLUDE_PATH) $(LIBEVENT_CFLAGS)
-LINKDIRS = -L$(ERL_INTERFACE_DIR)/lib -L$(PRIV_DIR) -L$(OCI_LIB_PATH) $(LIBEVENT_LDFLAGS)
-#LINKFLAGS = -levent -lpthread -lerl_interface -lei -lerloci -locci -lons -lclntshcore -lclntsh -lnnz12 -lipc1 -lmql1
+$(info Using LIBEVENT_LIB_PATH=$(LIBEVENT_LDFLAGS))
+$(info Using LIBEVENT_INCLUDE_PATH=$(LIBEVENT_CFLAGS))
+
+CXXFLAGS = -ggdb -Wall -I$(ERL_INTERFACE_DIR)/include  -I$(ERLOCI_PATH) -I$(ERLOCI_LIB_PATH) -I$(INSTANT_CLIENT_INCLUDE_PATH) $(LIBEVENT_CFLAGS)
+LINKDIRS = -L$(ERL_INTERFACE_DIR)/lib -L$(PRIV_DIR) -L$(INSTANT_CLIENT_LIB_PATH) $(LIBEVENT_LDFLAGS)
 LINKFLAGS = -levent -lpthread -lerl_interface -lei -lerloci -locci -lclntsh -lnnz12
 
 all: $(PRIV_DIR) $(PRIV_DIR)/$(EXE_TARGET)
-	@echo "erloci compiled!!!"
+	@echo "erloci compiled."
 
 $(PRIV_DIR):
 	$(MKDIR_P) $(PRIV_DIR)
