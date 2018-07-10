@@ -27,7 +27,7 @@ $(info Using ERL_INTERFACE_DIR=$(ERL_INTERFACE_DIR))
 
 # e.g. INSTANT_CLIENT_LIB_PATH     = ../../instantclient_12_1/
 # e.g. INSTANT_CLIENT_INCLUDE_PATH = ../../instantclient_12_1/sdk/include/
-OCI_LOCAL_FOUND := $(firstword $(wildcard */libocci.* ../*/libocci.* ../../*/libocci.* ../../../*/libocci.* ../../../../*/libocci.* ../../../../../*/libocci.*))
+OCI_LOCAL_FOUND := $(firstword $(wildcard ../instantclient*/libocci.* ../../*/libocci.* ../../../*/libocci.* ../../../../*/libocci.* ../../../../../*/libocci.*))
 # e.g. INSTANT_CLIENT_LIB_PATH     = /usr/lib/oracle/12.1/client64/lib/
 # e.g. INSTANT_CLIENT_INCLUDE_PATH = /usr/include/oracle/12.1/client64/
 OCI_GLOBAL_FOUND := $(firstword $(wildcard /usr/lib/oracle/*/client64/lib/libocci.*))
