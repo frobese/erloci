@@ -1,6 +1,11 @@
 EXE_TARGET = ocierl
 LIB_TARGET = liberloci.a
 
+ifneq ($(OS),Windows_NT)
+	OS := $(shell uname -s)
+endif
+$(info Detected OS is $(OS))
+
 ifeq "$(wildcard c_src)" ""
 	SRC_PATH_PREFIX = 
 	PRIV_DIR = ../priv
@@ -77,10 +82,16 @@ $(info Using LIBEVENT_INCLUDE_PATH=$(LIBEVENT_CFLAGS))
 
 CXXFLAGS = -ggdb -Wall -I$(ERL_INTERFACE_DIR)/include  -I$(ERLOCI_PATH) -I$(ERLOCI_LIB_PATH) -I$(INSTANT_CLIENT_INCLUDE_PATH) $(LIBEVENT_CFLAGS)
 LINKDIRS = -L$(ERL_INTERFACE_DIR)/lib -L$(PRIV_DIR) -L$(INSTANT_CLIENT_LIB_PATH) $(LIBEVENT_LDFLAGS)
-LINKFLAGS = -levent -lpthread -lerl_interface -lei -lerloci -locci -lons -lclntshcore -lclntsh -lnnz12 -lipc1 -lmql1
+ifeq ($(OS),Darwin)
+	LINKFLAGS = -levent -lpthread -lerl_interface -lei -lerloci -locci -lclntsh -lnnz12
+	OCI_LIBS=lib{occi,clntsh,nnz12,ons,clntshcore,ociei}.dylib*
+else
+	LINKFLAGS = -levent -lpthread -lerl_interface -lei -lerloci -locci -lons -lclntshcore -lclntsh -lnnz12 -lipc1 -lmql1
+	OCI_LIBS=*.so*
+endif
 
 all: $(PRIV_DIR) $(PRIV_DIR)/$(EXE_TARGET)
-	@rsync -uL --progress $(INSTANT_CLIENT_LIB_PATH)/*.so* $(PRIV_DIR)/
+	@rsync -uL --progress $(INSTANT_CLIENT_LIB_PATH)/$(OCI_LIBS) $(PRIV_DIR)/
 	@echo "erloci compiled."
 
 $(PRIV_DIR):
@@ -104,4 +115,4 @@ clean:
 	rm -rf $(ERLOCI_LIB_OBJS)
 	rm -rf $(PRIV_DIR)/$(LIB_TARGET)
 	rm -rf $(PRIV_DIR)/$(EXE_TARGET)
-	rm -rf $(PRIV_DIR)/*.so*
+	rm -rf $(PRIV_DIR)/*.{so,dylib}*
